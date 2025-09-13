@@ -1,6 +1,6 @@
 // Production Telegram Bot Webhook Handler
-import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
-import { Bot, webhookCallback, InputFile } from 'grammy';
+import { Handler, HandlerContext, HandlerEvent } from '@netlify/functions';
+import { Bot, InputFile, webhookCallback } from 'grammy';
 
 // Environment variables
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -14,7 +14,7 @@ const bot = new Bot(BOT_TOKEN);
 async function generateImageWithImagen(prompt: string) {
   try {
     console.log(`🎨 Generating image with Imagen for: "${prompt}"`);
-    
+
     const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict', {
       method: 'POST',
       headers: {
@@ -30,15 +30,15 @@ async function generateImageWithImagen(prompt: string) {
         }
       })
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Imagen API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
-    
+
     const data = await response.json();
     console.log('🎨 Image generation successful!');
-    
+
     if ((data as any).predictions && (data as any).predictions.length > 0) {
       const prediction = (data as any).predictions[0];
       if (prediction.bytesBase64Encoded) {
@@ -48,7 +48,7 @@ async function generateImageWithImagen(prompt: string) {
         };
       }
     }
-    
+
     throw new Error('No image data in response');
   } catch (error) {
     console.error('Imagen API error:', error);
@@ -75,9 +75,9 @@ async function callClaudeAPI(message: string, maxTokens: number = 100) {
         }]
       })
     });
-    
+
     const data = await response.json();
-    
+
     if (response.ok) {
       return (data as any).content[0]?.text || '응답이 없습니다.';
     } else {
@@ -98,7 +98,7 @@ function isQuestion(text: string): boolean {
     /(방법|어떻게|알려줘|궁금)/,    // asking for help/info
     /(추천|제안|의견)/,           // asking for recommendations
   ];
-  
+
   return questionPatterns.some(pattern => pattern.test(text.trim()));
 }
 
@@ -106,24 +106,24 @@ function isQuestion(text: string): boolean {
 function isDobbyActivated(text: string): { activated: boolean; command: string | null; content: string } {
   const dobbyPattern = /도비야[,\s]*(.*)/i;
   const match = text.match(dobbyPattern);
-  
+
   if (!match) {
     return { activated: false, command: null, content: '' };
   }
-  
+
   const content = match[1].trim();
-  
+
   // Check for image generation commands
   if (/(그려줘|그려|그림|이미지|생성)/i.test(content)) {
     const imagePrompt = content.replace(/(그려줘|그려|그림|이미지|생성해)/gi, '').trim();
     return { activated: true, command: 'image', content: imagePrompt };
   }
-  
-  // Check for Q&A commands  
+
+  // Check for Q&A commands
   if (/(알려줘|뭐야|설명해|가르쳐|궁금)/i.test(content)) {
     return { activated: true, command: 'ask', content: content };
   }
-  
+
   // Default to Q&A if no specific command detected
   return { activated: true, command: 'ask', content: content };
 }
@@ -132,7 +132,7 @@ function isDobbyActivated(text: string): { activated: boolean; command: string |
 async function answerQuestion(question: string) {
   try {
     console.log(`🤔 Processing question: "${question}"`);
-    
+
     // Create a comprehensive prompt for better answers
     const prompt = `다음 질문에 대해 정확하고 도움이 되는 답변을 한국어로 제공해주세요:
 
@@ -145,8 +145,8 @@ async function answerQuestion(question: string) {
 - 친근하고 이해하기 쉬운 톤
 
 답변:`;
-    
-    const answer = await callClaudeAPI(prompt, 500);
+
+    const answer = await callClaudeAPI(prompt, 2000);
     return answer;
   } catch (error) {
     console.error('Q&A Error:', error);
@@ -200,7 +200,7 @@ bot.command('test', async (ctx) => {
 
 bot.command('summary', async (ctx) => {
   console.log('📝 Summary command received');
-  
+
   try {
     const message = await callClaudeAPI('안녕하세요! 프로덕션 환경에서 테스트입니다. 한국어로 짧게 인사해주세요.');
     await ctx.reply(`🎉 Claude API 프로덕션 테스트 성공!
@@ -216,7 +216,7 @@ ${message}
 
 bot.command('image', async (ctx) => {
   const prompt = ctx.message?.text?.replace('/image', '').trim() || '';
-  
+
   if (!prompt) {
     await ctx.reply(`🎨 프로덕션 이미지 생성 사용법:
 
@@ -233,22 +233,22 @@ bot.command('image', async (ctx) => {
 • /image 귀여운 펭귄이 코딩하는 모습`);
     return;
   }
-  
+
   console.log(`🎨 Production image generation requested: "${prompt}"`);
-  
+
   const generatingMessage = await ctx.reply(`🎨 프로덕션 이미지 생성 중...
 
 프롬프트: "${prompt}"
 
 ⚡ Netlify Functions + Google Imagen 4.0
 🌍 서버리스 환경에서 처리 중...`);
-  
+
   try {
     const imageResult = await generateImageWithImagen(prompt);
-    
+
     // Create buffer from base64
     const imageBuffer = Buffer.from(imageResult.imageData.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
-    
+
     // Send image directly from buffer
     await ctx.replyWithPhoto(new InputFile(imageBuffer, `generated_${Date.now()}.png`), {
       caption: `🎨 프로덕션 이미지 생성 완료!
@@ -260,15 +260,15 @@ bot.command('image', async (ctx) => {
 🎯 해상도: 1024x1024
 ⏱️ ${new Date().toLocaleString('ko-KR')}`
     });
-    
+
     // Delete generating message
     await ctx.api.deleteMessage(ctx.chat.id, generatingMessage.message_id);
-    
+
     console.log('✅ Production image sent successfully!');
-    
+
   } catch (error) {
     console.error('Production image generation error:', error);
-    
+
     await ctx.api.editMessageText(
       ctx.chat.id,
       generatingMessage.message_id,
@@ -284,7 +284,7 @@ ${(error as Error).message}
 
 bot.command('ask', async (ctx) => {
   const question = ctx.message?.text?.replace('/ask', '').trim() || '';
-  
+
   if (!question) {
     await ctx.reply(`🤔 **AI 질문답변 사용법:**
 
@@ -304,21 +304,21 @@ bot.command('ask', async (ctx) => {
 🚀 더 구체적인 질문일수록 더 정확한 답변을 받을 수 있어요!`);
     return;
   }
-  
+
   console.log(`🔍 Explicit question asked: "${question}"`);
-  
+
   const thinkingMessage = await ctx.reply(`🤔 질문을 분석하고 있습니다...
 
 질문: "${question}"
 
 ⚡ Claude AI가 답변을 준비하고 있습니다...`);
-  
+
   try {
     const answer = await answerQuestion(question);
-    
+
     // Delete thinking message and send answer
     await ctx.api.deleteMessage(ctx.chat.id, thinkingMessage.message_id);
-    
+
     await ctx.reply(`🤖 **AI 답변** (/ask 명령어)
 
 ❓ **질문:** ${question}
@@ -329,12 +329,12 @@ ${answer}
 ---
 ✨ 추가 질문이 있으면 언제든 /ask [질문] 하세요!
 ⏰ ${new Date().toLocaleString('ko-KR')}`);
-    
+
     console.log('✅ Explicit question answered successfully!');
-    
+
   } catch (error) {
     console.error('Ask command error:', error);
-    
+
     await ctx.api.editMessageText(
       ctx.chat.id,
       thinkingMessage.message_id,
@@ -351,18 +351,18 @@ ${(error as Error).message}
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text;
   console.log(`💬 Production message received: ${text}`);
-  
+
   // Skip if it's a command
   if (text.startsWith('/')) {
     return;
   }
-  
+
   // Check for Dobby activation first
   const dobbyCheck = isDobbyActivated(text);
-  
+
   if (dobbyCheck.activated) {
     console.log(`🧙‍♀️ Dobby activated! Command: ${dobbyCheck.command}, Content: "${dobbyCheck.content}"`);
-    
+
     if (dobbyCheck.command === 'image') {
       // Handle Dobby image generation
       if (!dobbyCheck.content) {
@@ -376,22 +376,22 @@ bot.on('message:text', async (ctx) => {
 ✨ 어떤 그림을 그려드릴까요?`);
         return;
       }
-      
+
       console.log(`🎨 Dobby image generation: "${dobbyCheck.content}"`);
-      
+
       const generatingMessage = await ctx.reply(`🧙‍♀️ **도비가 그림을 그리고 있습니다!**
 
 🎨 그릴 내용: "${dobbyCheck.content}"
 
 ⚡ 마법으로 이미지를 생성하고 있습니다...
 ✨ 도비는 항상 최선을 다합니다!`);
-      
+
       try {
         const imageResult = await generateImageWithImagen(dobbyCheck.content);
-        
+
         // Create buffer from base64
         const imageBuffer = Buffer.from(imageResult.imageData.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
-        
+
         // Send image directly from buffer
         await ctx.replyWithPhoto(new InputFile(imageBuffer, `dobby_${Date.now()}.png`), {
           caption: `🧙‍♀️ **도비가 그림을 완성했습니다!**
@@ -404,15 +404,15 @@ bot.on('message:text', async (ctx) => {
 
 💡 다른 그림도 "도비야, ~~~ 그려줘"라고 말씀해주세요!`
         });
-        
+
         // Delete generating message
         await ctx.api.deleteMessage(ctx.chat.id, generatingMessage.message_id);
-        
+
         console.log('✅ Dobby image generation successful!');
-        
+
       } catch (error) {
         console.error('Dobby image generation error:', error);
-        
+
         await ctx.api.editMessageText(
           ctx.chat.id,
           generatingMessage.message_id,
@@ -424,24 +424,24 @@ bot.on('message:text', async (ctx) => {
 💡 잠시 후 다시 말씀해주시면 더 열심히 하겠습니다!`
         );
       }
-      
+
     } else if (dobbyCheck.command === 'ask') {
       // Handle Dobby Q&A
       console.log(`🤔 Dobby Q&A: "${dobbyCheck.content}"`);
-      
+
       const thinkingMessage = await ctx.reply(`🧙‍♀️ **도비가 생각하고 있습니다!**
 
 ❓ 질문: "${dobbyCheck.content}"
 
 🧠 도비가 열심히 답을 찾고 있습니다...
 ✨ 잠시만 기다려주세요!`);
-      
+
       try {
         const answer = await answerQuestion(dobbyCheck.content);
-        
+
         // Delete thinking message and send answer
         await ctx.api.deleteMessage(ctx.chat.id, thinkingMessage.message_id);
-        
+
         await ctx.reply(`🧙‍♀️ **도비의 답변입니다!**
 
 ❓ **질문:** ${dobbyCheck.content}
@@ -453,12 +453,12 @@ ${answer}
 🏠 도비는 언제나 주인님을 위해 준비되어 있습니다!
 💬 더 궁금한 것이 있으면 "도비야, ~~~ 알려줘"라고 말씀해주세요!
 ⏰ ${new Date().toLocaleString('ko-KR')}`);
-        
+
         console.log('✅ Dobby Q&A successful!');
-        
+
       } catch (error) {
         console.error('Dobby Q&A error:', error);
-        
+
         await ctx.api.editMessageText(
           ctx.chat.id,
           thinkingMessage.message_id,
@@ -471,26 +471,26 @@ ${answer}
         );
       }
     }
-    
+
     return; // Dobby handled the message, skip other processing
   }
-  
+
   // Original Q&A functionality (for non-Dobby messages)
   if (isQuestion(text)) {
     console.log(`❓ Question detected: "${text}"`);
-    
+
     const thinkingMessage = await ctx.reply(`🤔 질문을 분석하고 있습니다...
 
 질문: "${text}"
 
 ⚡ Claude AI가 답변을 준비하고 있습니다...`);
-    
+
     try {
       const answer = await answerQuestion(text);
-      
+
       // Delete thinking message and send answer
       await ctx.api.deleteMessage(ctx.chat.id, thinkingMessage.message_id);
-      
+
       await ctx.reply(`🤖 **AI 답변**
 
 ❓ **질문:** ${text}
@@ -502,12 +502,12 @@ ${answer}
 ✨ 더 궁금한 것이 있으면 언제든 질문하세요!
 💡 **팁:** "도비야, ~~~ 알려줘"라고 하면 개인비서처럼 도와드려요!
 ⏰ ${new Date().toLocaleString('ko-KR')}`);
-      
+
       console.log('✅ Question answered successfully!');
-      
+
     } catch (error) {
       console.error('Q&A error:', error);
-      
+
       await ctx.api.editMessageText(
         ctx.chat.id,
         thinkingMessage.message_id,
@@ -528,7 +528,7 @@ ${(error as Error).message}
 
 🤖 **일반 AI 기능:**
 • 🎨 이미지 생성: /image ${text}
-• 💬 질문하기: "${text}은 뭐야?" 
+• 💬 질문하기: "${text}은 뭐야?"
 
 🏠 도비는 언제나 주인님을 기다리고 있습니다!`);
   }
@@ -545,7 +545,7 @@ const webhookHandler = webhookCallback(bot, 'std/http');
 // Netlify Functions handler
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   console.log('🌐 Webhook received in production environment');
-  
+
   try {
     // Verify it's a POST request
     if (event.httpMethod !== 'POST') {
@@ -554,7 +554,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         body: JSON.stringify({ error: 'Method not allowed' })
       };
     }
-    
+
     // Create request object for webhook handler
     const request = new Request('https://example.com/webhook', {
       method: 'POST',
@@ -564,12 +564,12 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       },
       body: event.body
     });
-    
+
     // Process webhook
     const response = await webhookHandler(request);
-    
+
     console.log('✅ Webhook processed successfully');
-    
+
     return {
       statusCode: response.status,
       headers: {
@@ -577,16 +577,16 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       },
       body: await response.text()
     };
-    
+
   } catch (error) {
     console.error('❌ Webhook processing error:', error);
-    
+
     return {
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Internal server error',
         message: (error as Error).message
       })
