@@ -57,7 +57,7 @@ async function generateImageWithImagen(prompt: string) {
 }
 
 // Helper function for Claude API
-async function callClaudeAPI(message: string) {
+async function callClaudeAPI(message: string, maxTokens: number = 100) {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -68,7 +68,7 @@ async function callClaudeAPI(message: string) {
       },
       body: JSON.stringify({
         model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 100,
+        max_tokens: maxTokens,
         messages: [{
           role: 'user',
           content: message
@@ -89,22 +89,72 @@ async function callClaudeAPI(message: string) {
   }
 }
 
+// Helper function to detect questions
+function isQuestion(text: string): boolean {
+  const questionPatterns = [
+    /\?$/,                    // ends with ?
+    /^(뭐|무엇|어떻|어디|언제|왜|누구|어느)/,  // Korean question words
+    /^(what|how|where|when|why|who|which)/i,  // English question words
+    /(방법|어떻게|알려줘|궁금)/,    // asking for help/info
+    /(추천|제안|의견)/,           // asking for recommendations
+  ];
+  
+  return questionPatterns.some(pattern => pattern.test(text.trim()));
+}
+
+// Enhanced Q&A function with web search capability
+async function answerQuestion(question: string) {
+  try {
+    console.log(`🤔 Processing question: "${question}"`);
+    
+    // Create a comprehensive prompt for better answers
+    const prompt = `다음 질문에 대해 정확하고 도움이 되는 답변을 한국어로 제공해주세요:
+
+질문: ${question}
+
+답변할 때 다음을 고려해주세요:
+- 정확하고 최신 정보 제공
+- 구체적이고 실용적인 답변
+- 필요하다면 단계별 설명
+- 친근하고 이해하기 쉬운 톤
+
+답변:`;
+    
+    const answer = await callClaudeAPI(prompt, 500);
+    return answer;
+  } catch (error) {
+    console.error('Q&A Error:', error);
+    throw error;
+  }
+}
+
 // Bot commands
 bot.command('start', async (ctx) => {
   console.log('📨 Start command received');
-  await ctx.reply(`🎨 프로덕션 AI 봇입니다! 🤖
+  await ctx.reply(`🤖 **AI 멀티 봇입니다!** 🎨
 
-🌟 24/7 작동하는 실제 서비스:
+🚀 **4가지 핵심 기능:**
+• 💬 **질문답변** - 자동 질문 감지 + AI 답변  
+• 🎨 **이미지 생성** - Google Imagen 4.0
+• 🔍 **지능형 검색** - Claude 3.5 Sonnet
+• ⚡ **실시간 처리** - Netlify 서버리스
+
+📋 **명령어:**
 • /start - 봇 시작하기
-• /test - 연결 테스트  
-• /summary - Claude AI 테스트
-• /image [설명] - 🎨 실제 이미지 생성
+• /ask [질문] - 명시적 질문하기
+• /image [설명] - 이미지 생성
+• /test - 시스템 상태 확인
+• /summary - AI 테스트
 
-✨ Netlify Functions로 서버리스 운영
-🚀 Webhook 방식으로 실시간 처리
-💰 Google Imagen 4.0 + Claude 3.5 Sonnet
+✨ **자동 질문 감지 예시:**
+• "파이썬 어떻게 배워?" 
+• "뭐가 좋을까?"
+• "프로그래밍 공부법은?"
+• "어떻게 하면 될까?"
 
-예시: /image 귀여운 우주 고양이`);
+💡 **명령어 없이도 질문하면 AI가 자동 답변!**
+
+🎯 **Phase 4 완료** - Q&A 봇 시스템 구현 완료!`);
 });
 
 bot.command('test', async (ctx) => {
@@ -205,20 +255,132 @@ ${(error as Error).message}
   }
 });
 
-// Handle text messages
+bot.command('ask', async (ctx) => {
+  const question = ctx.message?.text?.replace('/ask', '').trim() || '';
+  
+  if (!question) {
+    await ctx.reply(`🤔 **AI 질문답변 사용법:**
+
+/ask [질문내용]
+
+📝 **질문 예시:**
+• /ask 파이썬 문법 어떻게 배워?
+• /ask 좋은 영화 추천해줘
+• /ask 프로그래밍 공부 방법은?
+• /ask 건강한 식단 짜는 법 알려줘
+
+💡 **팁:** 명령어 없이도 질문하면 자동 감지됩니다!
+• "날씨가 어때?"
+• "뭐가 좋을까?"
+• "어떻게 하면 될까?"
+
+🚀 더 구체적인 질문일수록 더 정확한 답변을 받을 수 있어요!`);
+    return;
+  }
+  
+  console.log(`🔍 Explicit question asked: "${question}"`);
+  
+  const thinkingMessage = await ctx.reply(`🤔 질문을 분석하고 있습니다...
+
+질문: "${question}"
+
+⚡ Claude AI가 답변을 준비하고 있습니다...`);
+  
+  try {
+    const answer = await answerQuestion(question);
+    
+    // Delete thinking message and send answer
+    await ctx.api.deleteMessage(ctx.chat.id, thinkingMessage.message_id);
+    
+    await ctx.reply(`🤖 **AI 답변** (/ask 명령어)
+
+❓ **질문:** ${question}
+
+💡 **답변:**
+${answer}
+
+---
+✨ 추가 질문이 있으면 언제든 /ask [질문] 하세요!
+⏰ ${new Date().toLocaleString('ko-KR')}`);
+    
+    console.log('✅ Explicit question answered successfully!');
+    
+  } catch (error) {
+    console.error('Ask command error:', error);
+    
+    await ctx.api.editMessageText(
+      ctx.chat.id,
+      thinkingMessage.message_id,
+      `❌ 답변 생성 중 오류가 발생했습니다:
+
+${(error as Error).message}
+
+💡 잠시 후 다시 질문해보세요.`
+    );
+  }
+});
+
+// Handle text messages with Q&A functionality
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text;
   console.log(`💬 Production message received: ${text}`);
   
-  if (!text.startsWith('/')) {
+  // Skip if it's a command
+  if (text.startsWith('/')) {
+    return;
+  }
+  
+  // Check if it's a question
+  if (isQuestion(text)) {
+    console.log(`❓ Question detected: "${text}"`);
+    
+    const thinkingMessage = await ctx.reply(`🤔 질문을 분석하고 있습니다...
+
+질문: "${text}"
+
+⚡ Claude AI가 답변을 준비하고 있습니다...`);
+    
+    try {
+      const answer = await answerQuestion(text);
+      
+      // Delete thinking message and send answer
+      await ctx.api.deleteMessage(ctx.chat.id, thinkingMessage.message_id);
+      
+      await ctx.reply(`🤖 **AI 답변**
+
+❓ **질문:** ${text}
+
+💡 **답변:**
+${answer}
+
+---
+✨ 더 궁금한 것이 있으면 언제든 질문하세요!
+⏰ ${new Date().toLocaleString('ko-KR')}`);
+      
+      console.log('✅ Question answered successfully!');
+      
+    } catch (error) {
+      console.error('Q&A error:', error);
+      
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        thinkingMessage.message_id,
+        `❌ 답변 생성 중 오류가 발생했습니다:
+
+${(error as Error).message}
+
+💡 잠시 후 다시 질문해보세요.`
+      );
+    }
+  } else {
+    // For non-questions, suggest image generation or provide help
     await ctx.reply(`📨 메시지 수신: "${text}"
 
-🎨 이미지로 만들어볼까요?
-/image ${text}
+🤖 **AI 봇 기능:**
+• 🎨 이미지 생성: /image ${text}
+• 💬 질문하기: "${text}은 뭐야?" 또는 "${text} 어떻게 해?"
 
-🤖 또는 다른 기능:
-• /test - 프로덕션 상태 확인
-• /summary - Claude AI 테스트`);
+💡 **팁:** 질문 형태로 말하면 AI가 자동으로 답변해요!`);
   }
 });
 
