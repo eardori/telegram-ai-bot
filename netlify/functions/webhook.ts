@@ -102,6 +102,32 @@ function isQuestion(text: string): boolean {
   return questionPatterns.some(pattern => pattern.test(text.trim()));
 }
 
+// Helper function to detect Dobby activation
+function isDobbyActivated(text: string): { activated: boolean; command: string | null; content: string } {
+  const dobbyPattern = /도비야[,\s]*(.*)/i;
+  const match = text.match(dobbyPattern);
+  
+  if (!match) {
+    return { activated: false, command: null, content: '' };
+  }
+  
+  const content = match[1].trim();
+  
+  // Check for image generation commands
+  if (/(그려줘|그려|그림|이미지|생성)/i.test(content)) {
+    const imagePrompt = content.replace(/(그려줘|그려|그림|이미지|생성해)/gi, '').trim();
+    return { activated: true, command: 'image', content: imagePrompt };
+  }
+  
+  // Check for Q&A commands  
+  if (/(알려줘|뭐야|설명해|가르쳐|궁금)/i.test(content)) {
+    return { activated: true, command: 'ask', content: content };
+  }
+  
+  // Default to Q&A if no specific command detected
+  return { activated: true, command: 'ask', content: content };
+}
+
 // Enhanced Q&A function with web search capability
 async function answerQuestion(question: string) {
   try {
@@ -131,30 +157,31 @@ async function answerQuestion(question: string) {
 // Bot commands
 bot.command('start', async (ctx) => {
   console.log('📨 Start command received');
-  await ctx.reply(`🤖 **AI 멀티 봇입니다!** 🎨
+  await ctx.reply(`🧙‍♀️ **도비 AI 봇입니다!** 🏠
 
-🚀 **4가지 핵심 기능:**
-• 💬 **질문답변** - 자동 질문 감지 + AI 답변  
-• 🎨 **이미지 생성** - Google Imagen 4.0
-• 🔍 **지능형 검색** - Claude 3.5 Sonnet
-• ⚡ **실시간 처리** - Netlify 서버리스
+🌟 **도비 개인비서 모드 (NEW!):**
+• 🎨 **"도비야, ~~~ 그려줘"** - 마법같은 이미지 생성
+• 💬 **"도비야, ~~~ 알려줘/뭐야?"** - 충실한 질문 답변
+• 🏠 **개인비서처럼** - 친근하고 정중한 서비스
 
-📋 **명령어:**
-• /start - 봇 시작하기
+🤖 **일반 AI 기능:**
 • /ask [질문] - 명시적 질문하기
 • /image [설명] - 이미지 생성
-• /test - 시스템 상태 확인
-• /summary - AI 테스트
+• 자동 질문 감지 - 질문하면 바로 답변
 
-✨ **자동 질문 감지 예시:**
-• "파이썬 어떻게 배워?" 
-• "뭐가 좋을까?"
-• "프로그래밍 공부법은?"
-• "어떻게 하면 될까?"
+🧙‍♀️ **도비 사용 예시:**
+• "도비야, 귀여운 강아지 그려줘"
+• "도비야, 파이썬 공부법 알려줘"
+• "도비야, 블록체인이 뭐야?"
+• "도비야, 맛있는 요리 레시피 그려줘"
 
-💡 **명령어 없이도 질문하면 AI가 자동 답변!**
+✨ **도비의 특별함:**
+• 🎭 해리포터 도비 캐릭터 스타일
+• 🏠 "주인님"을 위한 충실한 서비스
+• 🔮 마법같은 AI 능력 (Google Imagen 4.0 + Claude 3.5)
 
-🎯 **Phase 4 완료** - Q&A 봇 시스템 구현 완료!`);
+🎯 **도비는 언제나 준비되어 있습니다!**
+"도비야"라고 불러주시면 즉시 달려갑니다! 🏃‍♂️✨`);
 });
 
 bot.command('test', async (ctx) => {
@@ -320,7 +347,7 @@ ${(error as Error).message}
   }
 });
 
-// Handle text messages with Q&A functionality
+// Handle text messages with Dobby activation and Q&A functionality
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text;
   console.log(`💬 Production message received: ${text}`);
@@ -330,7 +357,125 @@ bot.on('message:text', async (ctx) => {
     return;
   }
   
-  // Check if it's a question
+  // Check for Dobby activation first
+  const dobbyCheck = isDobbyActivated(text);
+  
+  if (dobbyCheck.activated) {
+    console.log(`🧙‍♀️ Dobby activated! Command: ${dobbyCheck.command}, Content: "${dobbyCheck.content}"`);
+    
+    if (dobbyCheck.command === 'image') {
+      // Handle Dobby image generation
+      if (!dobbyCheck.content) {
+        await ctx.reply(`🧙‍♀️ **도비가 준비되었습니다!**
+
+🎨 **이미지 생성 사용법:**
+• "도비야, 귀여운 강아지 그려줘"
+• "도비야, 미래적인 로봇 그려줘"
+• "도비야, 아름다운 풍경 그림 그려줘"
+
+✨ 어떤 그림을 그려드릴까요?`);
+        return;
+      }
+      
+      console.log(`🎨 Dobby image generation: "${dobbyCheck.content}"`);
+      
+      const generatingMessage = await ctx.reply(`🧙‍♀️ **도비가 그림을 그리고 있습니다!**
+
+🎨 그릴 내용: "${dobbyCheck.content}"
+
+⚡ 마법으로 이미지를 생성하고 있습니다...
+✨ 도비는 항상 최선을 다합니다!`);
+      
+      try {
+        const imageResult = await generateImageWithImagen(dobbyCheck.content);
+        
+        // Create buffer from base64
+        const imageBuffer = Buffer.from(imageResult.imageData.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
+        
+        // Send image directly from buffer
+        await ctx.replyWithPhoto(new InputFile(imageBuffer, `dobby_${Date.now()}.png`), {
+          caption: `🧙‍♀️ **도비가 그림을 완성했습니다!**
+
+🎨 "${dobbyCheck.content}"
+
+✨ Google Imagen 4.0으로 마법처럼 생성
+🏠 도비는 언제나 주인님을 위해 최선을 다합니다!
+⏰ ${new Date().toLocaleString('ko-KR')}
+
+💡 다른 그림도 "도비야, ~~~ 그려줘"라고 말씀해주세요!`
+        });
+        
+        // Delete generating message
+        await ctx.api.deleteMessage(ctx.chat.id, generatingMessage.message_id);
+        
+        console.log('✅ Dobby image generation successful!');
+        
+      } catch (error) {
+        console.error('Dobby image generation error:', error);
+        
+        await ctx.api.editMessageText(
+          ctx.chat.id,
+          generatingMessage.message_id,
+          `🧙‍♀️ **도비가 실수했습니다...**
+
+❌ 이미지 생성 중 오류: ${(error as Error).message}
+
+😔 도비는 실패를 용서받지 못합니다...
+💡 잠시 후 다시 말씀해주시면 더 열심히 하겠습니다!`
+        );
+      }
+      
+    } else if (dobbyCheck.command === 'ask') {
+      // Handle Dobby Q&A
+      console.log(`🤔 Dobby Q&A: "${dobbyCheck.content}"`);
+      
+      const thinkingMessage = await ctx.reply(`🧙‍♀️ **도비가 생각하고 있습니다!**
+
+❓ 질문: "${dobbyCheck.content}"
+
+🧠 도비가 열심히 답을 찾고 있습니다...
+✨ 잠시만 기다려주세요!`);
+      
+      try {
+        const answer = await answerQuestion(dobbyCheck.content);
+        
+        // Delete thinking message and send answer
+        await ctx.api.deleteMessage(ctx.chat.id, thinkingMessage.message_id);
+        
+        await ctx.reply(`🧙‍♀️ **도비의 답변입니다!**
+
+❓ **질문:** ${dobbyCheck.content}
+
+💡 **도비의 답변:**
+${answer}
+
+---
+🏠 도비는 언제나 주인님을 위해 준비되어 있습니다!
+💬 더 궁금한 것이 있으면 "도비야, ~~~ 알려줘"라고 말씀해주세요!
+⏰ ${new Date().toLocaleString('ko-KR')}`);
+        
+        console.log('✅ Dobby Q&A successful!');
+        
+      } catch (error) {
+        console.error('Dobby Q&A error:', error);
+        
+        await ctx.api.editMessageText(
+          ctx.chat.id,
+          thinkingMessage.message_id,
+          `🧙‍♀️ **도비가 실수했습니다...**
+
+❌ 답변 중 오류: ${(error as Error).message}
+
+😔 도비는 아직 모르는 것이 많습니다...
+💡 다른 방식으로 물어봐주시면 더 열심히 하겠습니다!`
+        );
+      }
+    }
+    
+    return; // Dobby handled the message, skip other processing
+  }
+  
+  // Original Q&A functionality (for non-Dobby messages)
   if (isQuestion(text)) {
     console.log(`❓ Question detected: "${text}"`);
     
@@ -355,6 +500,7 @@ ${answer}
 
 ---
 ✨ 더 궁금한 것이 있으면 언제든 질문하세요!
+💡 **팁:** "도비야, ~~~ 알려줘"라고 하면 개인비서처럼 도와드려요!
 ⏰ ${new Date().toLocaleString('ko-KR')}`);
       
       console.log('✅ Question answered successfully!');
@@ -373,14 +519,18 @@ ${(error as Error).message}
       );
     }
   } else {
-    // For non-questions, suggest image generation or provide help
+    // For non-questions, suggest Dobby or other features
     await ctx.reply(`📨 메시지 수신: "${text}"
 
-🤖 **AI 봇 기능:**
-• 🎨 이미지 생성: /image ${text}
-• 💬 질문하기: "${text}은 뭐야?" 또는 "${text} 어떻게 해?"
+🧙‍♀️ **도비 개인비서 모드:**
+• 🎨 "도비야, ${text} 그려줘" - 이미지 생성
+• 💬 "도비야, ${text} 뭐야?" - 질문 답변
 
-💡 **팁:** 질문 형태로 말하면 AI가 자동으로 답변해요!`);
+🤖 **일반 AI 기능:**
+• 🎨 이미지 생성: /image ${text}
+• 💬 질문하기: "${text}은 뭐야?" 
+
+🏠 도비는 언제나 주인님을 기다리고 있습니다!`);
   }
 });
 
