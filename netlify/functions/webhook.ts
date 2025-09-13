@@ -39,8 +39,8 @@ async function generateImageWithImagen(prompt: string) {
     const data = await response.json();
     console.log('🎨 Image generation successful!');
     
-    if (data.predictions && data.predictions.length > 0) {
-      const prediction = data.predictions[0];
+    if ((data as any).predictions && (data as any).predictions.length > 0) {
+      const prediction = (data as any).predictions[0];
       if (prediction.bytesBase64Encoded) {
         return {
           imageData: prediction.bytesBase64Encoded,
@@ -79,9 +79,9 @@ async function callClaudeAPI(message: string) {
     const data = await response.json();
     
     if (response.ok) {
-      return data.content[0]?.text || '응답이 없습니다.';
+      return (data as any).content[0]?.text || '응답이 없습니다.';
     } else {
-      throw new Error(data.error?.message || '알 수 없는 오류');
+      throw new Error((data as any).error?.message || '알 수 없는 오류');
     }
   } catch (error) {
     console.error('Claude API Error:', error);
@@ -138,7 +138,7 @@ ${message}
 });
 
 bot.command('image', async (ctx) => {
-  const prompt = ctx.message.text.replace('/image', '').trim();
+  const prompt = ctx.message?.text?.replace('/image', '').trim() || '';
   
   if (!prompt) {
     await ctx.reply(`🎨 프로덕션 이미지 생성 사용법:
