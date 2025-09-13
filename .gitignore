@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Environment variables
+.env
+.env.local
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+
+# Generated images
+generated_image_*.png
+
+# Local test files
+simple-test-bot.js
+enhanced-bot.js
+imagen-bot.js
+
+# Netlify
+.netlify/
+
+# IDE files
+.vscode/
+.DS_Store
