@@ -1,0 +1,9 @@
+# Telegram webhook endpoint
+/webhook /.netlify/functions/webhook 200
+
+# API endpoints
+/api/summary /.netlify/functions/summary-scheduler 200
+/api/health /.netlify/functions/webhook 200
+
+# Catch all - show index
+/* /index.html 200
