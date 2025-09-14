@@ -986,7 +986,7 @@ bot.on('message:text', async (ctx) => {
                 // Download image
                 console.log('📥 Downloading image from Telegram...');
                 const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-                const imageResponse = await fetchWithTimeout(imageUrl, {}, 3000); // 3s timeout for download
+                const imageResponse = await fetchWithTimeout(imageUrl, {}, 2000); // 2s timeout for download
                 const imageArrayBuffer = await imageResponse.arrayBuffer();
                 const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
                 console.log('✅ Image downloaded, size:', imageBase64.length);
@@ -1024,7 +1024,7 @@ bot.on('message:text', async (ctx) => {
                                 responseMimeType: "image/jpeg"
                             }
                         })
-                    }, 7000 // 7-second timeout
+                    }, 5000 // 5-second timeout
                     );
                     modelUsed = 'Gemini 2.0 Flash Experimental';
                 }
@@ -1048,7 +1048,8 @@ bot.on('message:text', async (ctx) => {
                                 maxOutputTokens: 50
                             }
                         })
-                    }, 2000);
+                    }, 1500 // 1.5s timeout for analysis
+                    );
                     const analysisData = await analysisResponse.json();
                     const prompt = analysisData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
                     // Generate new image with Imagen
@@ -1066,7 +1067,8 @@ bot.on('message:text', async (ctx) => {
                                 aspectRatio: '1:1'
                             }
                         })
-                    }, 5000);
+                    }, 3000 // 3s timeout for generation
+                    );
                     modelUsed = 'Gemini Flash + Imagen 4.0';
                 }
                 if (!editResponse.ok) {
@@ -1290,28 +1292,31 @@ const handler = async (event, _context) => {
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
         }
-        // Process webhook asynchronously to avoid timeout
         const request = new Request('https://example.com/webhook', {
             method: 'POST',
             headers: { 'content-type': 'application/json', ...event.headers },
             body: event.body
         });
-        // Start processing in background (don't await)
-        webhookHandler(request)
-            .then(() => console.log('✅ Webhook processed successfully'))
-            .catch((error) => console.error('❌ Webhook processing error:', error));
-        // Return immediately to prevent timeout
-        console.log('📨 Returning immediate response to Telegram');
+        // Process webhook synchronously but with timeout protection
+        const response = await Promise.race([
+            webhookHandler(request),
+            new Promise((resolve) => setTimeout(() => {
+                console.log('⚠️ Webhook processing timeout - returning early');
+                resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+            }, 9500) // 9.5 seconds timeout
+            )
+        ]);
+        console.log('✅ Webhook processed');
         return {
-            statusCode: 200,
+            statusCode: response.status,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ok: true })
+            body: await response.text()
         };
     }
     catch (error) {
-        console.error('❌ Webhook handler error:', error);
+        console.error('❌ Webhook processing error:', error);
         return {
-            statusCode: 200, // Still return 200 to prevent Telegram retry
+            statusCode: 200, // Return 200 to prevent Telegram retry
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ok: true })
         };
