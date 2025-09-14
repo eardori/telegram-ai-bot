@@ -1108,7 +1108,29 @@ Output ONLY the prompt.`;
         // Generate enhanced image with Imagen using Gemini's analysis
         // The analysis from Gemini already contains a detailed prompt
         const enhancedPrompt = analysis;
-        
+
+        // Check remaining time before image generation
+        const elapsedTime = Date.now() - visionStartTime;
+        if (elapsedTime > 3000) {
+          // If we've already used 3+ seconds, respond with prompt only
+          // Delete processing message first
+          await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
+
+          await ctx.reply(`✅ **이미지 분석 완료!**
+
+📝 **생성된 프롬프트:**
+"${enhancedPrompt}"
+
+💡 **이미지 생성하기:**
+복사해서 다시 보내주세요:
+\`도비야 ${enhancedPrompt} 그려줘\`
+
+⚠️ 시간 제한으로 분석만 완료했습니다.`);
+
+          console.log('⏱️ Timeout prevention: Returned prompt only');
+          return;
+        }
+
         const imageResult = await generateImageWithImagen(enhancedPrompt, false);
         
         // Delete processing message
