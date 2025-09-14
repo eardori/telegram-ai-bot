@@ -303,11 +303,18 @@ async function callClaudeAPI(message: string, maxTokens: number = 2000, temperat
   }
 }
 
-// Helper function for Claude API (Vision)
-async function callClaudeVisionAPI(prompt: string, imageData: string, mediaType: string) {
-  try {
-    console.log(`🖼️ Calling Claude Vision API for prompt: "${prompt}"`);
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+// Helper function for Claude API (Vision) with retry logic
+async function callClaudeVisionAPI(prompt: string, imageData: string, mediaType: string, retries: number = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`🔄 Retrying Claude Vision API (attempt ${attempt + 1}/${retries + 1})...`);
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+
+      console.log(`🖼️ Calling Claude Vision API for prompt: "${prompt}"`);
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -337,27 +344,48 @@ async function callClaudeVisionAPI(prompt: string, imageData: string, mediaType:
       })
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log('🖼️ Claude Vision API call successful!');
-      return (data as any).content[0]?.text || '이미지 분석에 실패했습니다.';
-    } else {
-      // Try to parse error response
-      let errorMessage = `Vision API 오류: ${response.status} ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        console.error('Claude Vision API Error Response:', errorData);
-        errorMessage = (errorData as any).error?.message || errorMessage;
-      } catch {
-        // If JSON parsing fails, use default error message
-        console.error('Could not parse error response body');
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🖼️ Claude Vision API call successful!');
+        return (data as any).content[0]?.text || '이미지 분석에 실패했습니다.';
+      } else {
+        // Try to parse error response
+        let errorMessage = `Vision API 오류: ${response.status} ${response.statusText}`;
+        let isOverloaded = false;
+        try {
+          const errorData = await response.json();
+          console.error('Claude Vision API Error Response:', errorData);
+          errorMessage = (errorData as any).error?.message || errorMessage;
+          // Check if it's an overload error
+          isOverloaded = (errorData as any).error?.type === 'overloaded_error' ||
+                        errorMessage.toLowerCase().includes('overloaded');
+        } catch {
+          // If JSON parsing fails, use default error message
+          console.error('Could not parse error response body');
+        }
+
+        // If it's an overload error and we have retries left, throw to retry
+        if (isOverloaded && attempt < retries) {
+          console.log('🔄 Claude API is overloaded, will retry...');
+          throw new Error(errorMessage);
+        } else {
+          // Final error, no more retries
+          throw new Error(errorMessage);
+        }
       }
-      throw new Error(errorMessage);
+    } catch (error) {
+      console.error(`Claude Vision API Error (attempt ${attempt + 1}):`, error);
+
+      // If this is the last attempt, throw the error
+      if (attempt === retries) {
+        throw error;
+      }
+      // Otherwise, continue to next iteration for retry
     }
-  } catch (error) {
-    console.error('Claude Vision API Error:', error);
-    throw error;
   }
+
+  // Should not reach here, but just in case
+  throw new Error('Claude Vision API failed after all retries');
 }
 
 // Centralized error handler

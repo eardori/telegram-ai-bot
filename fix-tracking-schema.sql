@@ -15,6 +15,10 @@ ADD COLUMN IF NOT EXISTS first_name TEXT,
 ADD COLUMN IF NOT EXISTS last_name TEXT,
 ADD COLUMN IF NOT EXISTS username TEXT;
 
+-- Add missing column to tracked_messages table
+ALTER TABLE tracked_messages
+ADD COLUMN IF NOT EXISTS contains_media BOOLEAN DEFAULT FALSE;
+
 -- Update any existing tracking_sessions that don't have expires_at set
 UPDATE tracking_sessions
 SET expires_at = started_at + INTERVAL '7 days'
