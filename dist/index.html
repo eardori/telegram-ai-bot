@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram AI Bot - Webhook Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            margin: 20px;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .emoji {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .status {
+            display: inline-block;
+            background: rgba(34, 197, 94, 0.9);
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            margin: 1.5rem 0;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+        }
+        .info {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .info p {
+            margin: 0.5rem 0;
+            opacity: 0.9;
+        }
+        .version {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        .links {
+            margin-top: 2rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .link {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+        }
+        .webhook-info {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+        @media (max-width: 480px) {
+            h1 { font-size: 2rem; }
+            .emoji { font-size: 3rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="emoji">🤖</div>
+        <h1>Telegram AI Bot</h1>
+        <div class="status">✅ Service Active</div>
+
+        <div class="info">
+            <p><strong>도비 AI 봇</strong> - 텔레그램 그룹 채팅 어시스턴트</p>
+            <p class="version">Version 2.0.0</p>
+        </div>
+
+        <div class="webhook-info">
+            <p>🔗 Webhook Endpoint:</p>
+            <p><code>/.netlify/functions/webhook</code></p>
+        </div>
+
+        <div class="links">
+            <a href="https://t.me/MultifulDobi_bot" class="link" target="_blank">
+                💬 Chat with Bot
+            </a>
+            <a href="https://github.com/eardori/telegram-ai-bot" class="link" target="_blank">
+                📚 GitHub Repo
+            </a>
+        </div>
+
+        <div class="info" style="margin-top: 2rem;">
+            <p style="font-size: 0.9rem; opacity: 0.7;">
+                🧙‍♀️ Powered by Claude 3.5 Sonnet & Google Imagen 4.0
+            </p>
+            <p style="font-size: 0.9rem; opacity: 0.7;">
+                🚀 Deployed on Netlify Functions
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Add some interactivity
+        console.log('🤖 Telegram AI Bot Service is running!');
+        console.log('📡 Webhook endpoint: /.netlify/functions/webhook');
+        console.log('🌐 Version: 2.0.0');
+    </script>
+</body>
+</html>

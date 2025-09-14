@@ -7,7 +7,7 @@ npm-debug.log*
 .env.local
 
 # Build outputs
-dist/
+# dist/  # Netlify needs this
 build/
 
 # Logs

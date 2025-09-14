@@ -1,7 +1,7 @@
 [build]
   functions = "netlify/functions"
-  command = "echo 'No build required - TypeScript functions deployed directly'"
-  publish = "."
+  command = "mkdir -p dist && cp index.html dist/ && cp _redirects dist/"
+  publish = "dist"
 
 [build.environment]
   NODE_VERSION = "18"
@@ -12,7 +12,7 @@
 
 [dev]
   functions = "netlify/functions"
-  publish = "."
+  publish = "dist"
   command = "npm run dev"
 
 # Environment variables for development
