@@ -342,12 +342,17 @@ async function callClaudeVisionAPI(prompt: string, imageData: string, mediaType:
       console.log('🖼️ Claude Vision API call successful!');
       return (data as any).content[0]?.text || '이미지 분석에 실패했습니다.';
     } else {
-      const errorData = await response.json().catch(async () => {
-        // If JSON parsing fails, try text
-        return { error: { message: await response.text() } };
-      });
-      console.error('Claude Vision API Error Response:', errorData);
-      throw new Error((errorData as any).error?.message || `Vision API 오류: ${response.status} ${response.statusText}`);
+      // Try to parse error response
+      let errorMessage = `Vision API 오류: ${response.status} ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        console.error('Claude Vision API Error Response:', errorData);
+        errorMessage = (errorData as any).error?.message || errorMessage;
+      } catch {
+        // If JSON parsing fails, use default error message
+        console.error('Could not parse error response body');
+      }
+      throw new Error(errorMessage);
     }
   } catch (error) {
     console.error('Claude Vision API Error:', error);
@@ -975,7 +980,12 @@ bot.on('message:text', async (ctx) => {
       if (!imageResponse.ok) throw new Error('Telegram에서 이미지를 다운로드하지 못했습니다.');
       const imageBuffer = await imageResponse.arrayBuffer();
       const imageData = Buffer.from(imageBuffer).toString('base64');
-      const mediaType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      // Ensure media type is compatible with Claude Vision API
+      let mediaType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      // Claude only supports specific image formats
+      if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mediaType)) {
+        mediaType = 'image/jpeg'; // Default to JPEG if unsupported format
+      }
 
       const visionPrompt = `Based on the user's request, analyze the provided image and generate a new, detailed, and creative prompt in English for an image generation model like Google Imagen. The new prompt should retain the original image's style and composition while seamlessly incorporating the user's requested changes.
 
