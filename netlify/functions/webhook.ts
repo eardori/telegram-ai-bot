@@ -1050,60 +1050,79 @@ bot.on('message:text', async (ctx) => {
         const imageArrayBuffer = await imageResponse.arrayBuffer();
         const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
 
-        // Use Gemini 2.5 Flash Image (Nano Banana) for direct image editing
-        console.log('🎨 Using Gemini 2.5 Flash Image for direct editing...');
+        // Use fast analysis + generation approach
+        console.log('🎨 Quick image editing with Imagen 2...');
 
         const editStartTime = Date.now();
 
-        // Call Gemini 2.5 Flash Image API with source image and edit prompt
-        const editResponse = await fetchWithTimeout(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`,
+        // Step 1: Quick analysis with Gemini Flash (2s timeout)
+        const analysisPrompt = `Based on user request: "${editRequest}", create a SHORT image prompt (max 15 words). Output ONLY the prompt.`;
+
+        const visionResponse = await fetchWithTimeout(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{
                 parts: [
-                  {
-                    text: `Edit this image based on the user's request. User request: "${editRequest}". Apply the requested changes while maintaining the original image quality and subjects.`
-                  },
-                  {
-                    inline_data: {
-                      mime_type: 'image/jpeg',
-                      data: imageBase64  // Original image as source
-                    }
-                  }
+                  { text: analysisPrompt },
+                  { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
                 ]
               }],
               generationConfig: {
-                responseModalities: ["image"],  // Request image output
-                temperature: 0.4,
-                maxOutputTokens: 8192
+                temperature: 0.3,
+                maxOutputTokens: 50
               }
             })
           },
-          8000 // 8-second timeout
+          2000 // 2-second timeout
         );
 
-        if (!editResponse.ok) {
-          const errorText = await editResponse.text();
-          throw new Error(`Gemini 2.5 Flash Image API error: ${editResponse.status} - ${errorText}`);
+        if (!visionResponse.ok) {
+          throw new Error(`Vision API error: ${visionResponse.status}`);
         }
 
-        const editData = await editResponse.json();
-        const editedImageData = (editData as any).candidates?.[0]?.content?.parts?.[0]?.inline_data?.data;
+        const visionData = await visionResponse.json();
+        const generatedPrompt = (visionData as any).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
+
+        console.log(`📝 Generated prompt: ${generatedPrompt}`);
+
+        // Step 2: Generate new image with Imagen (5s timeout)
+        const imagenResponse = await fetchWithTimeout(
+          `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${GOOGLE_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              instances: [{ prompt: generatedPrompt }],
+              parameters: {
+                sampleCount: 1,
+                aspectRatio: "1:1",
+                outputOptions: { mimeType: "image/png" }
+              }
+            })
+          },
+          5000 // 5-second timeout
+        );
+
+        if (!imagenResponse.ok) {
+          const errorText = await imagenResponse.text();
+          throw new Error(`Imagen API error: ${imagenResponse.status} - ${errorText}`);
+        }
+
+        const imagenData = await imagenResponse.json();
+        const imageData = (imagenData as any).predictions?.[0]?.base64Image;
         const editProcessingTime = Date.now() - editStartTime;
 
-        if (!editedImageData) {
-          throw new Error('No edited image received from Gemini 2.5 Flash Image');
+        if (!imageData) {
+          throw new Error('No image received from Imagen');
         }
 
         console.log(`✅ Image editing completed in ${editProcessingTime}ms`);
 
         // Create buffer from the edited image
-        const editedImageBuffer = Buffer.from(editedImageData, 'base64');
+        const editedImageBuffer = Buffer.from(imageData, 'base64');
         
         // Delete processing message
         await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
@@ -1116,7 +1135,7 @@ bot.on('message:text', async (ctx) => {
           ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
 
 ✏️ **주인님의 요청**: "${editRequest}"
-🪄 **도비의 마법 도구**: Gemini 2.5 Flash Image (나노바나나)
+🪄 **도비의 마법 도구**: Gemini Flash + Imagen 2
 
 💰 **비용**: ${formatCost(editCost)}
 ⏱️ **처리시간**: ${editProcessingTime}ms
@@ -1127,7 +1146,7 @@ bot.on('message:text', async (ctx) => {
           : `🎨 **이미지 편집 완료!**
 
 ✏️ **편집 요청**: "${editRequest}"
-🤖 **AI 편집**: Gemini 2.5 Flash Image (나노바나나)
+🤖 **AI 편집**: Gemini Flash + Imagen 2
 
 💰 **비용**: ${formatCost(editCost)}
 ⏱️ **처리시간**: ${editProcessingTime}ms
