@@ -279,7 +279,7 @@ export class SummarizationService {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json() as any;
       const processingTime = Date.now() - startTime;
 
       if (!response.ok) {
@@ -398,7 +398,7 @@ ${conversationText}
 
 ---
 
-**참고**: ${message.length}개 메시지 중 의미있는 내용만 선별하여 요약했습니다.
+**참고**: ${messages.length}개 메시지 중 의미있는 내용만 선별하여 요약했습니다.
 
 도비는 주인님들의 대화를 가장 유용한 형태로 정리해드렸습니다! 🏠✨`;
 
@@ -634,7 +634,7 @@ ${conversationText}
           const result = await this.generateSummary({
             user_id: session.user_id,
             chat_id: session.chat_id,
-            session_id: session.session_id
+            session_id: session.id
           });
 
           if (result.success) {
@@ -644,7 +644,7 @@ ${conversationText}
           }
 
         } catch (error) {
-          console.error(`Error processing session ${session.session_id}:`, error);
+          console.error(`Error processing session ${session.id}:`, error);
           failed++;
         }
       }

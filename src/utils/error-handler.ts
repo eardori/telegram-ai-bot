@@ -233,15 +233,17 @@ export async function performConsistencyCheck(): Promise<{
     }
 
     // Clean up messages from expired sessions
+    const { data: expiredSessions } = await supabase
+      .from('tracking_sessions')
+      .select('id')
+      .eq('status', TrackingSessionStatus.EXPIRED);
+
+    const expiredSessionIds = expiredSessions?.map(s => s.id) || [];
+
     const { data: expiredMessages } = await supabase
       .from('tracked_messages')
       .select('id')
-      .in('tracking_session_id', 
-        supabase
-          .from('tracking_sessions')
-          .select('id')
-          .eq('status', TrackingSessionStatus.EXPIRED)
-      );
+      .in('tracking_session_id', expiredSessionIds);
 
     if (expiredMessages && expiredMessages.length > 0) {
       const { error } = await supabase

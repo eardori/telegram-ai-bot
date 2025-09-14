@@ -115,6 +115,8 @@ CREATE TABLE IF NOT EXISTS user_chat_tracking (
     first_name TEXT,
     last_name TEXT,
     is_tracking BOOLEAN DEFAULT FALSE,
+    tracking_started_at TIMESTAMPTZ,
+    tracking_stopped_at TIMESTAMPTZ,
     auto_summary_enabled BOOLEAN DEFAULT TRUE,
     summary_language TEXT DEFAULT 'ko',
     max_session_duration_hours INTEGER DEFAULT 24,
@@ -123,7 +125,7 @@ CREATE TABLE IF NOT EXISTS user_chat_tracking (
     total_messages_tracked INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
+
     UNIQUE(user_id, chat_id)
 );
 
@@ -135,6 +137,7 @@ CREATE TABLE IF NOT EXISTS tracking_sessions (
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'stopped', 'expired', 'summarized')),
     started_at TIMESTAMPTZ DEFAULT NOW(),
     ended_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days'),
     duration_minutes INTEGER,
     total_messages_collected INTEGER DEFAULT 0,
     meaningful_messages_collected INTEGER DEFAULT 0,
@@ -144,7 +147,7 @@ CREATE TABLE IF NOT EXISTS tracking_sessions (
     session_metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
+
     FOREIGN KEY (user_id, chat_id) REFERENCES user_chat_tracking(user_id, chat_id)
 );
 
