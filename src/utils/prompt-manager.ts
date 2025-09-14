@@ -405,10 +405,10 @@ export async function getPromptWithFallback(
  */
 export async function getImagePrompt(userInput: string, style?: string): Promise<string> {
   const startTime = Date.now();
-  
+
   try {
     const processedPrompt = await getProcessedPrompt('image_generation_enhanced', {
-      user_input: userInput,
+      user_request: userInput,  // Changed to user_request for consistency
       style: style || 'photorealistic'
     });
     
@@ -431,7 +431,7 @@ export async function getImagePrompt(userInput: string, style?: string): Promise
       responseTimeMs: Date.now() - startTime,
       success: false,
       errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      inputVariables: { user_input: userInput }
+      inputVariables: { user_request: userInput }
     });
     
     return fallbackPrompt;
@@ -443,17 +443,17 @@ export async function getImagePrompt(userInput: string, style?: string): Promise
  */
 export async function getDobbyImagePrompt(userInput: string): Promise<string> {
   const startTime = Date.now();
-  
+
   try {
     const processedPrompt = await getProcessedPrompt('dobby_image_generation', {
-      user_input: userInput
+      user_request: userInput  // Changed from user_input to user_request to match SQL template
     });
     
     await trackPromptUsage({
       promptId: processedPrompt.prompt.id,
       responseTimeMs: Date.now() - startTime,
       success: true,
-      inputVariables: { user_input: userInput }
+      inputVariables: { user_request: userInput }
     });
     
     return processedPrompt.processedTemplate;
@@ -465,7 +465,7 @@ export async function getDobbyImagePrompt(userInput: string): Promise<string> {
       responseTimeMs: Date.now() - startTime,
       success: false,
       errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      inputVariables: { user_input: userInput }
+      inputVariables: { user_request: userInput }
     });
     
     return fallback;
