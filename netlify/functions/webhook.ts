@@ -1282,11 +1282,14 @@ Focus on: composition, lighting, colors, atmosphere, style, and specific changes
 
       console.log(`🎨 Dobby image generation: "${dobbyCheck.content}"`);
 
-      // Get dynamic processing message
-      const processingMsg = await getSystemMessage('dobby_processing_image', {
-        user_input: dobbyCheck.content
-      });
-      
+      // Send immediate response to prevent timeout
+      const processingMsg = `🧙‍♀️ **도비가 그림을 그리고 있습니다!**
+
+🎨 주인님의 요청: "${dobbyCheck.content}"
+✨ 도비가 마법으로 그림을 만들고 있어요...
+
+⚡ 20-30초 정도 걸릴 수 있습니다. 잠시만 기다려주세요!`;
+
       const generatingMessage = await ctx.reply(processingMsg);
 
       try {
