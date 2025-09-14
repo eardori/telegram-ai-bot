@@ -1122,11 +1122,11 @@ bot.on('message:text', async (ctx) => {
         let editResponse;
         let modelUsed = '';
 
-        // First try Gemini 2.0 Flash (experimental but supports image generation)
+        // Try Gemini 2.5 Flash Image Preview for image editing
         try {
-          console.log('🔄 Trying Gemini 2.0 Flash Experimental...');
+          console.log('🔄 Trying Gemini 2.5 Flash Image Preview...');
           editResponse = await fetchWithTimeout(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1135,8 +1135,8 @@ bot.on('message:text', async (ctx) => {
                   parts: [
                     {
                       text: `Edit this image based on the request: "${editRequest}".
-                      Create an edited version that maintains the original subjects and composition while applying the requested changes.
-                      Be specific and preserve details.`
+                      Be hyper-specific and maintain the original subjects while applying the requested changes.
+                      Provide step-by-step editing to achieve the desired result.`
                     },
                     {
                       inline_data: {
@@ -1148,16 +1148,15 @@ bot.on('message:text', async (ctx) => {
                 }],
                 generationConfig: {
                   temperature: 0.4,
-                  maxOutputTokens: 8192,
-                  responseMimeType: "image/jpeg"
+                  maxOutputTokens: 8192
                 }
               })
             },
-            5000 // 5-second timeout
+            6000 // 6-second timeout
           );
-          modelUsed = 'Gemini 2.0 Flash Experimental';
+          modelUsed = 'Gemini 2.5 Flash Image Preview';
         } catch (error) {
-          console.log('⚠️ Gemini 2.0 Flash failed, trying fallback...');
+          console.log('⚠️ Gemini 2.5 Flash Image failed, trying fallback...');
 
           // Fallback: Use analysis + generation approach
           console.log('🔄 Fallback: Analysis + Generation approach');
@@ -1223,10 +1222,46 @@ bot.on('message:text', async (ctx) => {
         if (modelUsed.includes('Imagen')) {
           editedImageData = (editData as any).predictions?.[0]?.bytesBase64Encoded;
         } else {
-          // Gemini model response
-          editedImageData = (editData as any).candidates?.[0]?.content?.parts?.find(
-            (part: any) => part.inline_data?.mime_type?.startsWith('image/')
-          )?.inline_data?.data || (editData as any).candidates?.[0]?.content?.parts?.[0]?.text;
+          // Gemini model response - check if it returned an image or text
+          const parts = (editData as any).candidates?.[0]?.content?.parts;
+          if (parts) {
+            // Look for image data in the response
+            const imagePart = parts.find((part: any) => part.inline_data?.mime_type?.startsWith('image/'));
+            if (imagePart) {
+              editedImageData = imagePart.inline_data.data;
+            } else {
+              // If no image, Gemini returned text - need to use fallback
+              console.log('⚠️ Gemini returned text instead of image, using Imagen fallback');
+              const prompt = parts[0]?.text || editRequest;
+
+              // Generate with Imagen
+              const imagenResponse = await fetchWithTimeout(
+                'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict',
+                {
+                  method: 'POST',
+                  headers: {
+                    'x-goog-api-key': GOOGLE_API_KEY,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    instances: [{ prompt }],
+                    parameters: {
+                      sampleCount: 1,
+                      sampleImageSize: '1K',
+                      aspectRatio: '1:1'
+                    }
+                  })
+                },
+                3000
+              );
+
+              if (imagenResponse.ok) {
+                const imagenData = await imagenResponse.json();
+                editedImageData = (imagenData as any).predictions?.[0]?.bytesBase64Encoded;
+                modelUsed = 'Gemini + Imagen 4.0 (Fallback)';
+              }
+            }
+          }
         }
 
         if (!editedImageData) {
