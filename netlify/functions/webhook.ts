@@ -1001,85 +1001,7 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
-  // [NEW] Handle replies to photos for image editing
-  if (ctx.message.reply_to_message?.photo) {
-    const thinkingMessage = await ctx.reply('🖼️ **이미지 수정 요청 접수!**\n\n잠시만요, 원본 이미지를 분석하고 새로운 그림을 준비하고 있어요...');
-    try {
-      console.log(`🎨 Image editing request received. Prompt: "${text}"`);
-
-      const photo = ctx.message.reply_to_message.photo.sort((a, b) => b.width * b.height - a.width * a.height)[0];
-      const file = await ctx.api.getFile(photo.file_id);
-      const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path!}`;
-
-      console.log(`📥 Downloading image from: ${fileUrl}`);
-      const imageResponse = await fetch(fileUrl);
-      if (!imageResponse.ok) throw new Error('Telegram에서 이미지를 다운로드하지 못했습니다.');
-      const imageBuffer = await imageResponse.arrayBuffer();
-      const imageData = Buffer.from(imageBuffer).toString('base64');
-      // Ensure media type is compatible with Claude Vision API
-      let mediaType = imageResponse.headers.get('content-type') || 'image/jpeg';
-      // Claude only supports specific image formats
-      if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mediaType)) {
-        mediaType = 'image/jpeg'; // Default to JPEG if unsupported format
-      }
-
-      const visionPrompt = `Based on the user's request, analyze the provided image and generate a new, detailed, and creative prompt in English for an image generation model like Google Imagen. The new prompt should retain the original image's style and composition while seamlessly incorporating the user's requested changes.
-
-User Request: "${text}"
-
-Output Format: Respond ONLY with the ready-to-use English prompt for the image generation model. Do not include any other text, explanations, or quotation marks.`;
-
-      await ctx.api.editMessageText(ctx.chat.id, thinkingMessage.message_id, '🧠 **AI 비전 분석 중...**\n\nGemini Vision이 이미지를 분석하고 새로운 프롬프트를 생성하고 있습니다.');
-
-      // Use Gemini Vision instead of Claude for image analysis
-      const visionStartTime = Date.now();
-      const visionResponse = await fetchWithTimeout(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${GOOGLE_API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: visionPrompt },
-                {
-                  inline_data: {
-                    mime_type: mediaType,
-                    data: imageData
-                  }
-                }
-              ]
-            }]
-          })
-        },
-        15000 // 15-second timeout for Gemini Vision
-      );
-
-      if (!visionResponse.ok) {
-        throw new Error(`Gemini Vision API error: ${visionResponse.status}`);
-      }
-
-      const visionData = await visionResponse.json();
-      const newImagePrompt = (visionData as any).candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const visionProcessingTime = Date.now() - visionStartTime;
-
-      console.log(`🤖 New Imagen prompt by Gemini: "${newImagePrompt}"`);
-      await ctx.api.editMessageText(ctx.chat.id, thinkingMessage.message_id, `🎨 **새로운 이미지 생성 중...**\n\n프롬프트: "${newImagePrompt}"`);
-      const imageResult = await generateImageWithImagen(newImagePrompt);
-      const imageBufferNew = Buffer.from(imageResult.imageData, 'base64');
-
-      await ctx.replyWithPhoto(new InputFile(imageBufferNew, `edited_${Date.now()}.png`), {
-        caption: `🎨 **이미지 수정 완료!**\n\n**원본 요청:** "${text}"\n\n**AI 프롬프트:** "${newImagePrompt}"`
-      });
-      await ctx.api.deleteMessage(ctx.chat.id, thinkingMessage.message_id);
-      console.log('✅ Image editing completed!');
-    } catch (error) {
-      await handleError(ctx, error as Error, '이미지 수정', thinkingMessage);
-    }
-    return;
-  }
+  // [REMOVED] Duplicate image editing handler - using the improved one below
   
   // Check if this is a reply to a photo with editing request
   if (replyToMessage && 'photo' in replyToMessage && replyToMessage.photo) {
@@ -1125,30 +1047,18 @@ Output Format: Respond ONLY with the ready-to-use English prompt for the image g
         // Download image
         const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
         const imageResponse = await fetch(imageUrl);
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const imageBase64 = Buffer.from(imageBuffer).toString('base64');
+        const imageArrayBuffer = await imageResponse.arrayBuffer();
+        const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
 
-        // Analyze image with Gemini Vision with improved Korean prompt
-        const analysisPrompt = `You are an expert image editing AI assistant. Analyze this image carefully and understand the user's editing request in Korean.
+        // Analyze image with Gemini Vision - SIMPLIFIED for speed
+        const analysisPrompt = `User request: "${editRequest}"
 
-User's request: "${editRequest}"
+Create a SHORT English prompt (max 30 words) that:
+1. Describes main subject
+2. Applies the requested change
+3. Keep it simple
 
-Please:
-1. Identify the main subjects, objects, and current background in the image
-2. Understand what the user wants to change or improve
-3. Create a detailed, professional image generation prompt in English that will:
-   - Maintain the original subjects/people/objects
-   - Apply the requested changes (background change, style improvements, etc.)
-   - Enhance overall quality and aesthetics
-
-Common Korean editing requests:
-- "배경을 [X]로 변경해줘" = Change background to [X]
-- "더 예쁘게/멋지게 편집해줘" = Make it more beautiful/cool
-- "해변/산/도시 배경으로" = Beach/mountain/city background
-- "[X]를 추가해줘" = Add [X] to the image
-
-Provide a detailed English prompt for Imagen that captures all elements and requested changes.
-Focus on: composition, lighting, colors, atmosphere, style, and specific changes requested.`;
+Output ONLY the prompt.`;
         
         console.log('🔍 Analyzing image with Gemini Vision...');
 
@@ -1176,7 +1086,7 @@ Focus on: composition, lighting, colors, atmosphere, style, and specific changes
               }]
             })
           },
-          15000 // 15-second timeout for Gemini Vision
+          5000 // 5-second timeout for faster response
         );
 
         if (!visionResponse.ok) {
@@ -1234,7 +1144,12 @@ Focus on: composition, lighting, colors, atmosphere, style, and specific changes
 
 ✨ **편집된 이미지입니다!**`;
 
-        await ctx.replyWithPhoto(new InputFile(Buffer.from(imageResult.imageData, 'base64')), {
+        // Fix base64 handling
+        const editedImageBuffer = imageResult.imageData.includes('base64,')
+          ? Buffer.from(imageResult.imageData.split('base64,')[1], 'base64')
+          : Buffer.from(imageResult.imageData, 'base64');
+
+        await ctx.replyWithPhoto(new InputFile(editedImageBuffer), {
           caption: caption
         });
         
