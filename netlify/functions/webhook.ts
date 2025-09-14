@@ -1057,6 +1057,8 @@ bot.on('message:text', async (ctx) => {
   // Check if this is a reply to a photo with editing request
   if (replyToMessage && 'photo' in replyToMessage && replyToMessage.photo) {
     console.log('🖼️ Reply to photo detected, checking for editing request...');
+    console.log('📝 Reply text:', text);
+    console.log('📷 Photo count:', replyToMessage.photo.length);
 
     // Check for Dobby-style editing request or direct editing keywords
     const isDobbyEdit = text.includes('도비야');
@@ -1064,13 +1066,21 @@ bot.on('message:text', async (ctx) => {
 
     if (isDobbyEdit || editingKeywords.test(text)) {
       console.log('✏️ Image editing request detected!');
+      console.log('🔍 Is Dobby edit:', isDobbyEdit);
+      console.log('📝 Edit request:', text);
       
       try {
         // Get the largest photo
+        console.log('📷 Getting largest photo from message...');
         const photo = replyToMessage.photo[replyToMessage.photo.length - 1];
+        console.log('📷 Photo file_id:', photo.file_id);
+
+        console.log('🔄 Getting file info from Telegram API...');
         const file = await ctx.api.getFile(photo.file_id);
-        
+        console.log('📁 File path:', file.file_path);
+
         if (!file.file_path) {
+          console.error('❌ No file path received from Telegram');
           await ctx.reply('❌ 이미지 파일을 가져올 수 없습니다.');
           return;
         }
@@ -1096,105 +1106,93 @@ bot.on('message:text', async (ctx) => {
 ⚡ 잠시만 기다려주세요...`);
 
         // Download image
+        console.log('📥 Downloading image from Telegram...');
         const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-        const imageResponse = await fetch(imageUrl);
+        const imageResponse = await fetchWithTimeout(imageUrl, {}, 3000); // 3s timeout for download
         const imageArrayBuffer = await imageResponse.arrayBuffer();
         const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
+        console.log('✅ Image downloaded, size:', imageBase64.length);
 
-        // Use Gemini 2.5 Flash Image for real image editing
-        console.log('🎨 Using Gemini 2.5 Flash Image for editing...');
+        // 2-Stage approach: Analysis only to avoid timeout
+        console.log('🔍 Analyzing image for editing prompt generation...');
 
         const editStartTime = Date.now();
 
-        // Call Gemini 2.5 Flash Image API with source image and edit prompt
-        const editResponse = await fetchWithTimeout(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`,
+        // Quick analysis with Gemini Flash (3s timeout)
+        const analysisPrompt = `Based on user request: "${editRequest}", create a detailed image generation prompt (max 30 words) that would create a similar image with the requested changes. Output ONLY the prompt.`;
+
+        const visionResponse = await fetchWithTimeout(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{
                 parts: [
-                  {
-                    text: `Edit this image according to the following request: "${editRequest}". Be hyper-specific and preserve the original image quality and subjects while making the requested changes.`
-                  },
-                  {
-                    inline_data: {
-                      mime_type: 'image/jpeg',
-                      data: imageBase64  // Source image
-                    }
-                  }
+                  { text: analysisPrompt },
+                  { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
                 ]
               }],
               generationConfig: {
-                temperature: 0.4,
-                maxOutputTokens: 8192,
-                responseModalities: ["image"]  // Request image output
+                temperature: 0.3,
+                maxOutputTokens: 100
               }
             })
           },
-          8000 // 8-second timeout
+          3000 // 3-second timeout
         );
 
-        if (!editResponse.ok) {
-          const errorText = await editResponse.text();
-          throw new Error(`Gemini Image Edit API error: ${editResponse.status} - ${errorText}`);
+        if (!visionResponse.ok) {
+          const errorText = await visionResponse.text();
+          throw new Error(`Vision API error: ${visionResponse.status} - ${errorText}`);
         }
 
-        const editData = await editResponse.json();
+        const visionData = await visionResponse.json();
+        const generatedPrompt = (visionData as any).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
+        const analysisTime = Date.now() - editStartTime;
 
-        // Extract edited image from response
-        const editedImageData = (editData as any).candidates?.[0]?.content?.parts?.find(
-          (part: any) => part.inline_data?.mime_type?.startsWith('image/')
-        )?.inline_data?.data;
-
-        const editProcessingTime = Date.now() - editStartTime;
-
-        if (!editedImageData) {
-          throw new Error('No edited image received from Gemini 2.5 Flash Image');
-        }
-
-        console.log(`✅ Image editing completed in ${editProcessingTime}ms`);
-
-        // Create buffer from the edited image
-        const editedImageBuffer = Buffer.from(editedImageData, 'base64');
+        console.log(`📝 Generated prompt: ${generatedPrompt}`);
+        console.log(`⏱️ Analysis completed in ${analysisTime}ms`);
 
         // Delete processing message
         await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
 
-        // Calculate cost
-        const editCost = 0.002; // Approximate cost for Gemini Flash Image
+        // Send analysis result with instructions
+        const responseMsg = isDobbyEdit
+          ? `🧙‍♀️ **도비가 이미지를 분석했습니다!**
 
-        // Send edited image with appropriate message
-        const caption = isDobbyEdit
-          ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
-
-✏️ **주인님의 요청**: "${editRequest}"
-🪄 **도비의 마법 도구**: Gemini 2.5 Flash Image
-
-💰 **비용**: ${formatCost(editCost)}
-⏱️ **처리시간**: ${editProcessingTime}ms
-
-✨ **도비의 편집 결과입니다!**
-
-도비는 주인님이 만족하시길 바랍니다! 🧙‍♀️`
-          : `🎨 **이미지 편집 완료!**
-
+📸 **원본 이미지**: 분석 완료
 ✏️ **편집 요청**: "${editRequest}"
-🤖 **AI 편집**: Gemini 2.5 Flash Image
+📝 **생성 프롬프트**: "${generatedPrompt}"
 
-💰 **비용**: ${formatCost(editCost)}
-⏱️ **처리시간**: ${editProcessingTime}ms
+✨ **이제 새 이미지를 생성하려면:**
+👉 \`/generate ${generatedPrompt}\`
 
-✨ **편집된 이미지입니다!**`;
+💡 **프롬프트를 수정하려면:**
+👉 \`/generate [수정된 프롬프트]\`
 
-        await ctx.replyWithPhoto(new InputFile(editedImageBuffer), {
-          caption: caption
+⏱️ 분석 시간: ${analysisTime}ms
+🧙‍♀️ 도비가 도와드렸습니다!`
+          : `✅ **이미지 분석 완료!**
+
+📸 **원본 이미지**: 분석됨
+✏️ **편집 요청**: "${editRequest}"
+📝 **생성 프롬프트**: "${generatedPrompt}"
+
+✨ **새 이미지 생성:**
+👉 \`/generate ${generatedPrompt}\`
+
+💡 **프롬프트 수정:**
+👉 \`/generate [원하는 프롬프트]\`
+
+⏱️ 처리 시간: ${analysisTime}ms`;
+
+        await ctx.reply(responseMsg, {
+          reply_to_message_id: ctx.message.message_id,
+          parse_mode: 'Markdown'
         });
 
-        console.log('✅ Image editing completed successfully!');
+        console.log('✅ Image analysis completed and sent to user');
         
       } catch (error) {
         console.error('❌ Image editing error:', error);
@@ -1405,32 +1403,36 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
   console.log('🌐 Body:', event.body);
   console.log('🌐 Headers:', JSON.stringify(event.headers, null, 2));
 
-
   try {
     if (event.httpMethod !== 'POST') {
       return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
     }
 
+    // Process webhook asynchronously to avoid timeout
     const request = new Request('https://example.com/webhook', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...event.headers },
       body: event.body
     });
 
-    const response = await webhookHandler(request);
-    console.log('✅ Webhook processed successfully');
+    // Start processing in background (don't await)
+    webhookHandler(request)
+      .then(() => console.log('✅ Webhook processed successfully'))
+      .catch((error) => console.error('❌ Webhook processing error:', error));
 
+    // Return immediately to prevent timeout
+    console.log('📨 Returning immediate response to Telegram');
     return {
-      statusCode: response.status,
+      statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: await response.text()
+      body: JSON.stringify({ ok: true })
     };
   } catch (error) {
-    console.error('❌ Webhook processing error:', error);
+    console.error('❌ Webhook handler error:', error);
     return {
-      statusCode: 500,
+      statusCode: 200, // Still return 200 to prevent Telegram retry
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error', message: (error as Error).message })
+      body: JSON.stringify({ ok: true })
     };
   }
 };
