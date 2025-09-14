@@ -673,6 +673,57 @@ bot.command('image', async (ctx) => {
   }
 });
 
+// Generate command for image creation (also used for 2-stage editing)
+bot.command('generate', async (ctx) => {
+  const prompt = ctx.message?.text?.replace('/generate', '').trim() || '';
+
+  if (!prompt) {
+    await ctx.reply(`🎨 **이미지 생성 사용법:**
+
+/generate [프롬프트]
+
+예시:
+• /generate 귀여운 강아지가 공원에서 노는 모습
+• /generate futuristic city with flying cars
+• /generate 아름다운 일몰이 있는 해변
+
+💡 **이미지 편집 후 사용:**
+이미지 분석 후 제공된 프롬프트로 생성 가능`);
+    return;
+  }
+
+  console.log(`🎨 Generating image with prompt: "${prompt}"`);
+  const generatingMessage = await ctx.reply(`🎨 **이미지 생성 중...**
+
+📝 프롬프트: "${prompt}"
+🤖 AI: Google Imagen 4.0
+⚡ 잠시만 기다려주세요...`);
+
+  try {
+    const imageResult = await generateImageWithImagen(prompt, false, ctx.from?.id?.toString(), ctx.chat?.id?.toString());
+
+    // Create buffer from base64
+    const imageBuffer = Buffer.from(imageResult.imageData.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
+
+    await ctx.replyWithPhoto(new InputFile(imageBuffer, `generated_${Date.now()}.png`), {
+      caption: `🎨 **이미지 생성 완료!**
+
+📝 **프롬프트**: "${prompt}"
+✨ **AI**: Google Imagen 4.0
+💰 **비용**: ${formatCost(imageResult.cost)}
+⏱️ **처리시간**: ${imageResult.processingTime}ms
+
+📅 ${new Date().toLocaleString('ko-KR')}`
+    });
+
+    await ctx.api.deleteMessage(ctx.chat.id, generatingMessage.message_id);
+    console.log('✅ Image sent successfully!');
+
+  } catch (error) {
+    await handleError(ctx, error as Error, '이미지 생성', generatingMessage);
+  }
+});
+
 bot.command('ask', async (ctx) => {
   const question = ctx.message?.text?.replace('/ask', '').trim() || '';
   if (!question) {
@@ -1050,13 +1101,13 @@ bot.on('message:text', async (ctx) => {
         const imageArrayBuffer = await imageResponse.arrayBuffer();
         const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
 
-        // Use fast analysis + generation approach
-        console.log('🎨 Quick image editing with Imagen 2...');
+        // 2-Stage approach: Analysis only (no generation to avoid timeout)
+        console.log('🎨 Analyzing image for editing...');
 
         const editStartTime = Date.now();
 
-        // Step 1: Quick analysis with Gemini Flash (2s timeout)
-        const analysisPrompt = `Based on user request: "${editRequest}", create a SHORT image prompt (max 15 words). Output ONLY the prompt.`;
+        // Quick analysis with Gemini Flash (3s timeout)
+        const analysisPrompt = `Based on user request: "${editRequest}", create a descriptive image prompt (max 20 words) that captures the request. Output ONLY the prompt.`;
 
         const visionResponse = await fetchWithTimeout(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
@@ -1076,7 +1127,7 @@ bot.on('message:text', async (ctx) => {
               }
             })
           },
-          2000 // 2-second timeout
+          3000 // 3-second timeout
         );
 
         if (!visionResponse.ok) {
@@ -1085,82 +1136,48 @@ bot.on('message:text', async (ctx) => {
 
         const visionData = await visionResponse.json();
         const generatedPrompt = (visionData as any).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
+        const analysisTime = Date.now() - editStartTime;
 
         console.log(`📝 Generated prompt: ${generatedPrompt}`);
 
-        // Step 2: Generate new image with Imagen 4.0 (5s timeout)
-        const imagenResponse = await fetchWithTimeout(
-          'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict',
-          {
-            method: 'POST',
-            headers: {
-              'x-goog-api-key': GOOGLE_API_KEY,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              instances: [{ prompt: generatedPrompt }],
-              parameters: {
-                sampleCount: 1,
-                sampleImageSize: '1K',
-                aspectRatio: '1:1'
-              }
-            })
-          },
-          5000 // 5-second timeout
-        );
-
-        if (!imagenResponse.ok) {
-          const errorText = await imagenResponse.text();
-          throw new Error(`Imagen API error: ${imagenResponse.status} - ${errorText}`);
-        }
-
-        const imagenData = await imagenResponse.json();
-        const imageData = (imagenData as any).predictions?.[0]?.bytesBase64Encoded;
-        const editProcessingTime = Date.now() - editStartTime;
-
-        if (!imageData) {
-          throw new Error('No image received from Imagen');
-        }
-
-        console.log(`✅ Image editing completed in ${editProcessingTime}ms`);
-
-        // Create buffer from the edited image
-        const editedImageBuffer = Buffer.from(imageData, 'base64');
-        
         // Delete processing message
         await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
 
-        // Calculate cost (simplified for single API call)
-        const editCost = 0.002; // Approximate cost for Gemini Flash Image
+        // Send analysis result with instructions for generation
+        const responseMsg = isDobbyEdit
+          ? `🧙‍♀️ **도비가 이미지를 분석했습니다!**
 
-        // Send edited image with appropriate message
-        const caption = isDobbyEdit
-          ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
-
-✏️ **주인님의 요청**: "${editRequest}"
-🪄 **도비의 마법 도구**: Gemini Flash + Imagen 4.0
-
-💰 **비용**: ${formatCost(editCost)}
-⏱️ **처리시간**: ${editProcessingTime}ms
-
-✨ **도비의 편집 결과입니다!**
-
-도비는 주인님이 만족하시길 바랍니다! 🧙‍♀️`
-          : `🎨 **이미지 편집 완료!**
-
+📸 **원본 이미지**: 분석 완료
 ✏️ **편집 요청**: "${editRequest}"
-🤖 **AI 편집**: Gemini Flash + Imagen 4.0
+📝 **생성된 프롬프트**: "${generatedPrompt}"
 
-💰 **비용**: ${formatCost(editCost)}
-⏱️ **처리시간**: ${editProcessingTime}ms
+✨ **이제 이미지를 생성하려면:**
+👉 /generate ${generatedPrompt}
 
-✨ **편집된 이미지입니다!**`;
+💡 **프롬프트를 수정하고 싶다면:**
+👉 /generate [수정된 프롬프트]
 
-        await ctx.replyWithPhoto(new InputFile(editedImageBuffer), {
-          caption: caption
+⏱️ 분석 시간: ${analysisTime}ms
+🧙‍♀️ 도비가 도와드렸습니다!`
+          : `✅ **이미지 분석 완료!**
+
+📸 **원본 이미지**: 분석됨
+✏️ **편집 요청**: "${editRequest}"
+📝 **생성된 프롬프트**: "${generatedPrompt}"
+
+✨ **이미지 생성하기:**
+👉 /generate ${generatedPrompt}
+
+💡 **프롬프트 수정:**
+👉 /generate [원하는 프롬프트]
+
+⏱️ 처리 시간: ${analysisTime}ms`;
+
+        await ctx.reply(responseMsg, {
+          reply_to_message_id: ctx.message.message_id
         });
-        
-        console.log('✅ Image editing completed successfully!');
+
+        console.log('✅ Image analysis completed successfully!');
         
       } catch (error) {
         console.error('❌ Image editing error:', error);
