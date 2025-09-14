@@ -372,15 +372,10 @@ async function getImagePrompt(userInput, style) {
     }
     catch (error) {
         console.warn('⚠️ Database prompt not found, using fallback for getImagePrompt');
-        // Simple fallback prompt for image generation
-        const fallbackPrompt = `Create a high-quality, detailed image of: ${userInput}. Style: ${style || 'photorealistic'}, beautiful lighting, 8k resolution, professional photography.`;
-        await trackPromptUsage({
-            promptId: 'fallback',
-            responseTimeMs: Date.now() - startTime,
-            success: false,
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            inputVariables: { user_request: userInput }
-        });
+        // SIMPLIFIED fallback prompt for speed
+        const fallbackPrompt = userInput; // Direct pass-through for fastest response
+        // Skip tracking for fallback to avoid errors
+        console.log('Using direct fallback (no tracking):', fallbackPrompt);
         return fallbackPrompt;
     }
 }
@@ -402,14 +397,11 @@ async function getDobbyImagePrompt(userInput) {
         return processedPrompt.processedTemplate;
     }
     catch (error) {
-        const fallback = `Create a magical, high-quality image of: ${userInput}. Style: Harry Potter universe inspired, magical atmosphere, detailed, fantasy art, 8k resolution.`;
-        await trackPromptUsage({
-            promptId: 'fallback',
-            responseTimeMs: Date.now() - startTime,
-            success: false,
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            inputVariables: { user_request: userInput }
-        });
+        console.warn('⚠️ Database prompt not found, using fallback for getDobbyImagePrompt');
+        // SIMPLIFIED fallback for speed
+        const fallback = userInput; // Direct pass-through
+        // Skip tracking for fallback to avoid errors
+        console.log('Using direct Dobby fallback (no tracking):', fallback);
         return fallback;
     }
 }
