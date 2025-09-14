@@ -10,11 +10,14 @@
   node_bundler = "esbuild"
   directory = "netlify/functions"
 
-# Webhook function configuration
-[[functions]]
-  path = "/.netlify/functions/webhook"
+[functions."webhook"]
   # Increase timeout to 26 seconds (max for free tier)
   # This allows time for image generation and API calls
+  included_files = ["**"]
+  external_node_modules = ["sharp"]
+
+[[functions]]
+  path = "/.netlify/functions/webhook"
   timeout = 26
 
 [dev]
