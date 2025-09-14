@@ -1,0 +1,5 @@
+[build]
+  runtime = "nodejs18.x"
+
+[functions.webhook]
+  timeout = 30
