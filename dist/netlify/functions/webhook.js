@@ -979,70 +979,81 @@ bot.on('message:text', async (ctx) => {
                 const imageResponse = await fetch(imageUrl);
                 const imageArrayBuffer = await imageResponse.arrayBuffer();
                 const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
-                // 2-Stage approach: Analysis only (no generation to avoid timeout)
-                console.log('🎨 Analyzing image for editing...');
+                // Use Gemini 2.5 Flash Image for real image editing
+                console.log('🎨 Using Gemini 2.5 Flash Image for editing...');
                 const editStartTime = Date.now();
-                // Quick analysis with Gemini Flash (3s timeout)
-                const analysisPrompt = `Based on user request: "${editRequest}", create a descriptive image prompt (max 20 words) that captures the request. Output ONLY the prompt.`;
-                const visionResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`, {
+                // Call Gemini 2.5 Flash Image API with source image and edit prompt
+                const editResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({
                         contents: [{
                                 parts: [
-                                    { text: analysisPrompt },
-                                    { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
+                                    {
+                                        text: `Edit this image according to the following request: "${editRequest}". Be hyper-specific and preserve the original image quality and subjects while making the requested changes.`
+                                    },
+                                    {
+                                        inline_data: {
+                                            mime_type: 'image/jpeg',
+                                            data: imageBase64 // Source image
+                                        }
+                                    }
                                 ]
                             }],
                         generationConfig: {
-                            temperature: 0.3,
-                            maxOutputTokens: 50
+                            temperature: 0.4,
+                            maxOutputTokens: 8192,
+                            responseModalities: ["image"] // Request image output
                         }
                     })
-                }, 3000 // 3-second timeout
+                }, 8000 // 8-second timeout
                 );
-                if (!visionResponse.ok) {
-                    throw new Error(`Vision API error: ${visionResponse.status}`);
+                if (!editResponse.ok) {
+                    const errorText = await editResponse.text();
+                    throw new Error(`Gemini Image Edit API error: ${editResponse.status} - ${errorText}`);
                 }
-                const visionData = await visionResponse.json();
-                const generatedPrompt = visionData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
-                const analysisTime = Date.now() - editStartTime;
-                console.log(`📝 Generated prompt: ${generatedPrompt}`);
+                const editData = await editResponse.json();
+                // Extract edited image from response
+                const editedImageData = editData.candidates?.[0]?.content?.parts?.find((part) => part.inline_data?.mime_type?.startsWith('image/'))?.inline_data?.data;
+                const editProcessingTime = Date.now() - editStartTime;
+                if (!editedImageData) {
+                    throw new Error('No edited image received from Gemini 2.5 Flash Image');
+                }
+                console.log(`✅ Image editing completed in ${editProcessingTime}ms`);
+                // Create buffer from the edited image
+                const editedImageBuffer = Buffer.from(editedImageData, 'base64');
                 // Delete processing message
                 await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
-                // Send analysis result with instructions for generation
-                const responseMsg = isDobbyEdit
-                    ? `🧙‍♀️ **도비가 이미지를 분석했습니다!**
+                // Calculate cost
+                const editCost = 0.002; // Approximate cost for Gemini Flash Image
+                // Send edited image with appropriate message
+                const caption = isDobbyEdit
+                    ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
 
-📸 **원본 이미지**: 분석 완료
+✏️ **주인님의 요청**: "${editRequest}"
+🪄 **도비의 마법 도구**: Gemini 2.5 Flash Image
+
+💰 **비용**: ${formatCost(editCost)}
+⏱️ **처리시간**: ${editProcessingTime}ms
+
+✨ **도비의 편집 결과입니다!**
+
+도비는 주인님이 만족하시길 바랍니다! 🧙‍♀️`
+                    : `🎨 **이미지 편집 완료!**
+
 ✏️ **편집 요청**: "${editRequest}"
-📝 **생성된 프롬프트**: "${generatedPrompt}"
+🤖 **AI 편집**: Gemini 2.5 Flash Image
 
-✨ **이제 이미지를 생성하려면:**
-👉 /generate ${generatedPrompt}
+💰 **비용**: ${formatCost(editCost)}
+⏱️ **처리시간**: ${editProcessingTime}ms
 
-💡 **프롬프트를 수정하고 싶다면:**
-👉 /generate [수정된 프롬프트]
-
-⏱️ 분석 시간: ${analysisTime}ms
-🧙‍♀️ 도비가 도와드렸습니다!`
-                    : `✅ **이미지 분석 완료!**
-
-📸 **원본 이미지**: 분석됨
-✏️ **편집 요청**: "${editRequest}"
-📝 **생성된 프롬프트**: "${generatedPrompt}"
-
-✨ **이미지 생성하기:**
-👉 /generate ${generatedPrompt}
-
-💡 **프롬프트 수정:**
-👉 /generate [원하는 프롬프트]
-
-⏱️ 처리 시간: ${analysisTime}ms`;
-                await ctx.reply(responseMsg, {
-                    reply_to_message_id: ctx.message.message_id
+✨ **편집된 이미지입니다!**`;
+                await ctx.replyWithPhoto(new grammy_1.InputFile(editedImageBuffer), {
+                    caption: caption
                 });
-                console.log('✅ Image analysis completed successfully!');
+                console.log('✅ Image editing completed successfully!');
             }
             catch (error) {
                 console.error('❌ Image editing error:', error);
