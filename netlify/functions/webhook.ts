@@ -191,7 +191,8 @@ async function generateImageWithImagen(userInput: string, isDobby: boolean = fal
 
     console.log(`📝 Using enhanced prompt: "${enhancedPrompt}"`);
 
-    // Use enhanced fetch with 30-second timeout for image generation
+    // Use reduced timeout to fit within Netlify's 10-second limit
+    // Reduce image size for faster generation
     const response = await fetchWithTimeout(
       'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict',
       {
@@ -204,12 +205,12 @@ async function generateImageWithImagen(userInput: string, isDobby: boolean = fal
           instances: [{ prompt: enhancedPrompt }],
           parameters: {
             sampleCount: 1,
-            sampleImageSize: '1K',
+            sampleImageSize: '512',  // Reduced from 1K to 512 for faster generation
             aspectRatio: '1:1'
           }
         })
       },
-      30000 // 30-second timeout for image generation
+      8000 // 8-second timeout to fit within Netlify's 10-second limit
     );
 
     if (!response.ok) {
@@ -1295,7 +1296,7 @@ Focus on: composition, lighting, colors, atmosphere, style, and specific changes
 🎨 주인님의 요청: "${dobbyCheck.content}"
 ✨ 도비가 마법으로 그림을 만들고 있어요...
 
-⚡ 20-30초 정도 걸릴 수 있습니다. 잠시만 기다려주세요!`;
+⚡ 잠시만 기다려주세요!`;
 
       const generatingMessage = await ctx.reply(processingMsg);
 
