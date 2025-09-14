@@ -445,7 +445,14 @@ function isDobbyActivated(text: string): { activated: boolean; command: string |
 
   // Check for image generation commands
   if (/(그려줘|그려|그림|이미지|생성)/i.test(content)) {
-    const imagePrompt = content.replace(/(그려줘|그려|그림|이미지|생성해?)/gi, '').trim();
+    // Remove only the final command words, not all occurrences
+    const imagePrompt = content
+      .replace(/\s*(그림을\s+)?그려줘\s*$/i, '')  // Remove "그림을 그려줘" at the end
+      .replace(/\s*그려줘\s*$/i, '')  // Remove "그려줘" at the end
+      .replace(/\s*그려\s*$/i, '')  // Remove "그려" at the end
+      .replace(/\s*만들어줘\s*$/i, '')  // Remove "만들어줘" at the end
+      .replace(/\s*생성해줘\s*$/i, '')  // Remove "생성해줘" at the end
+      .trim();
     return { activated: true, command: 'image', content: imagePrompt };
   }
 
