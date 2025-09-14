@@ -20,14 +20,14 @@ ON CONFLICT (prompt_type, prompt_name) DO UPDATE SET
     metadata = EXCLUDED.metadata,
     updated_at = NOW();
 
--- 2. dobby_image_generation prompt
+-- 2. dobby_image_generation prompt (SIMPLIFIED FOR SPEED)
 INSERT INTO prompts (prompt_type, prompt_name, prompt_text, template_variables, metadata)
 VALUES (
     'image_generation',
     'dobby_image_generation',
-    'Create a magical, high-quality image of: {user_request}. Style: Harry Potter universe inspired, magical atmosphere, detailed, fantasy art, 8k resolution.',
+    '{user_request}',
     '["user_request"]',
-    '{"description": "Dobby style image generation prompt", "style": "magical", "quality": "high"}'
+    '{"description": "Dobby style image generation prompt - simplified for faster generation", "style": "direct", "quality": "balanced"}'
 )
 ON CONFLICT (prompt_type, prompt_name) DO UPDATE SET
     prompt_text = EXCLUDED.prompt_text,

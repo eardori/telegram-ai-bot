@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: telegram-ai-bot
+    env: node
+    region: singapore  # 한국과 가까운 리전
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BOT_TOKEN
+        sync: false  # Dashboard에서 설정
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
