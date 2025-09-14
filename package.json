@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "netlify dev",
-    "build": "mkdir -p dist && cp index.html dist/ && cp _redirects dist/ 2>/dev/null || true",
+    "build": "bash build.sh",
     "build:skip": "tsc --skipLibCheck --noEmitOnError false",
     "deploy": "netlify deploy --prod",
     "test": "echo 'No tests configured'",

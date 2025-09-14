@@ -1,6 +1,6 @@
 [build]
   functions = "netlify/functions"
-  command = "mkdir -p dist && cp index.html dist/ && cp _redirects dist/"
+  command = "bash build.sh"
   publish = "dist"
 
 [build.environment]
