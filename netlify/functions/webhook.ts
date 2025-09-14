@@ -269,7 +269,7 @@ async function callClaudeAPI(message: string, maxTokens: number = 2000, temperat
           }]
         })
       },
-      20000 // 20-second timeout for Claude API
+      45000 // 45-second timeout for Claude API (increased from 20s due to timeouts)
     );
 
 
@@ -940,7 +940,7 @@ ${analysis}
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text;
   const replyToMessage = ctx.message.reply_to_message;
-  
+
   console.log(`💬 DEBUGGING - Message received: "${text}"`);
   console.log(`💬 DEBUGGING - From user: ${ctx.from?.first_name} (ID: ${ctx.from?.id})`);
   console.log(`💬 DEBUGGING - Is bot: ${ctx.from?.is_bot}`);
@@ -949,6 +949,12 @@ bot.on('message:text', async (ctx) => {
   // 🚨 CRITICAL: Skip if message is from the bot itself to prevent infinite loops
   if (ctx.from?.is_bot || ctx.from?.id === ctx.me?.id) {
     console.log(`🤖 Skipping bot's own message: ${text}`);
+    return;
+  }
+
+  // 🚨 CRITICAL: Skip if this is a command - let command handlers process them
+  if (text.startsWith('/')) {
+    console.log(`⚡ Skipping command "${text}" - letting command handlers process it`);
     return;
   }
 
