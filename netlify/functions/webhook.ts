@@ -2,6 +2,11 @@
 import { Handler, HandlerContext, HandlerEvent } from '@netlify/functions';
 import { Bot, InputFile, webhookCallback } from 'grammy';
 
+// Constants
+const CLAUDE_MODEL = 'claude-3-5-sonnet-20241022';
+const IMAGEN_MODEL = 'imagen-4.0-generate-001';
+const ANTHROPIC_VERSION = '2023-06-01';
+
 // Environment variables
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY!;
@@ -15,7 +20,7 @@ async function generateImageWithImagen(prompt: string) {
   try {
     console.log(`🎨 Generating image with Imagen for: "${prompt}"`);
 
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict', {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${IMAGEN_MODEL}:predict`, {
       method: 'POST',
       headers: {
         'x-goog-api-key': GOOGLE_API_KEY,
@@ -64,10 +69,10 @@ async function callClaudeAPI(message: string, maxTokens: number = 100) {
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': ANTHROPIC_VERSION
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
+        model: CLAUDE_MODEL,
         max_tokens: maxTokens,
         messages: [{
           role: 'user',
@@ -100,10 +105,10 @@ async function callClaudeVisionAPI(prompt: string, imageData: string, mediaType:
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': ANTHROPIC_VERSION
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
+        model: CLAUDE_MODEL,
         max_tokens: 2000,
         messages: [{
           role: 'user',
@@ -352,7 +357,11 @@ bot.on('message:text', async (ctx) => {
       const imageData = Buffer.from(imageBuffer).toString('base64');
       const mediaType = imageResponse.headers.get('content-type') || 'image/jpeg';
 
-      const visionPrompt = `사용자가 제공한 이미지에 다음 요청을 적용하여, Google Imagen으로 새로운 이미지를 생성할 수 있는 상세하고 창의적인 프롬프트를 영어로 작성해줘. 기존 이미지의 스타일과 구성을 최대한 유지하면서 요청된 변경사항을 자연스럽게 통합해줘.\n\n**사용자 요청:** "${text}"\n\n**출력 형식:** 오직 영어 프롬프트만 응답. 다른 설명은 절대 추가하지마.`;
+      const visionPrompt = `Based on the user's request, analyze the provided image and generate a new, detailed, and creative prompt in English for an image generation model like Google Imagen. The new prompt should retain the original image's style and composition while seamlessly incorporating the user's requested changes.
+
+User Request: "${text}"
+
+Output Format: Respond ONLY with the ready-to-use English prompt for the image generation model. Do not include any other text, explanations, or quotation marks.`;
 
       await ctx.api.editMessageText(ctx.chat.id, thinkingMessage.message_id, '🧠 **AI 비전 분석 중...**\n\nClaude AI가 이미지를 분석하고 새로운 프롬프트를 생성하고 있습니다.');
       const newImagePrompt = await callClaudeVisionAPI(visionPrompt, imageData, mediaType);
@@ -433,52 +442,46 @@ const webhookHandler = webhookCallback(bot, 'std/http');
 
 // Netlify Functions handler
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+  // Environment variable validation
+  const requiredEnvVars = ['TELEGRAM_BOT_TOKEN', 'CLAUDE_API_KEY', 'GOOGLE_API_KEY'];
+  const missingEnvVars = requiredEnvVars.filter(key => !process.env[key]);
+
+  if (missingEnvVars.length > 0) {
+    const errorMessage = `CRITICAL: Missing required environment variables: ${missingEnvVars.join(', ')}`;
+    console.error(`❌ ${errorMessage}`);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Server configuration error', message: errorMessage })
+    };
+  }
+
   console.log('🌐 Webhook received in production environment');
 
   try {
-    // Verify it's a POST request
     if (event.httpMethod !== 'POST') {
-      return {
-        statusCode: 405,
-        body: JSON.stringify({ error: 'Method not allowed' })
-      };
+      return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
     }
 
-    // Create request object for webhook handler
     const request = new Request('https://example.com/webhook', {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...event.headers
-      },
+      headers: { 'content-type': 'application/json', ...event.headers },
       body: event.body
     });
 
-    // Process webhook
     const response = await webhookHandler(request);
-
     console.log('✅ Webhook processed successfully');
 
     return {
       statusCode: response.status,
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: await response.text()
     };
-
   } catch (error) {
     console.error('❌ Webhook processing error:', error);
-
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        error: 'Internal server error',
-        message: (error as Error).message
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Internal server error', message: (error as Error).message })
     };
   }
 };
