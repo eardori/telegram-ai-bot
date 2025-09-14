@@ -990,73 +990,134 @@ bot.on('message:text', async (ctx) => {
                 const imageArrayBuffer = await imageResponse.arrayBuffer();
                 const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
                 console.log('✅ Image downloaded, size:', imageBase64.length);
-                // 2-Stage approach: Analysis only to avoid timeout
-                console.log('🔍 Analyzing image for editing prompt generation...');
+                // Use Gemini for real image editing
+                console.log('🎨 Starting real image editing with Gemini...');
                 const editStartTime = Date.now();
-                // Quick analysis with Gemini Flash (3s timeout)
-                const analysisPrompt = `Based on user request: "${editRequest}", create a detailed image generation prompt (max 30 words) that would create a similar image with the requested changes. Output ONLY the prompt.`;
-                const visionResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                                parts: [
-                                    { text: analysisPrompt },
-                                    { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
-                                ]
-                            }],
-                        generationConfig: {
-                            temperature: 0.3,
-                            maxOutputTokens: 100
-                        }
-                    })
-                }, 3000 // 3-second timeout
-                );
-                if (!visionResponse.ok) {
-                    const errorText = await visionResponse.text();
-                    throw new Error(`Vision API error: ${visionResponse.status} - ${errorText}`);
+                // Try multiple Gemini models for image editing
+                let editResponse;
+                let modelUsed = '';
+                // First try Gemini 2.0 Flash (experimental but supports image generation)
+                try {
+                    console.log('🔄 Trying Gemini 2.0 Flash Experimental...');
+                    editResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                    parts: [
+                                        {
+                                            text: `Edit this image based on the request: "${editRequest}".
+                      Create an edited version that maintains the original subjects and composition while applying the requested changes.
+                      Be specific and preserve details.`
+                                        },
+                                        {
+                                            inline_data: {
+                                                mime_type: 'image/jpeg',
+                                                data: imageBase64
+                                            }
+                                        }
+                                    ]
+                                }],
+                            generationConfig: {
+                                temperature: 0.4,
+                                maxOutputTokens: 8192,
+                                responseMimeType: "image/jpeg"
+                            }
+                        })
+                    }, 7000 // 7-second timeout
+                    );
+                    modelUsed = 'Gemini 2.0 Flash Experimental';
                 }
-                const visionData = await visionResponse.json();
-                const generatedPrompt = visionData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
-                const analysisTime = Date.now() - editStartTime;
-                console.log(`📝 Generated prompt: ${generatedPrompt}`);
-                console.log(`⏱️ Analysis completed in ${analysisTime}ms`);
+                catch (error) {
+                    console.log('⚠️ Gemini 2.0 Flash failed, trying fallback...');
+                    // Fallback: Use analysis + generation approach
+                    console.log('🔄 Fallback: Analysis + Generation approach');
+                    // Quick analysis
+                    const analysisResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                    parts: [
+                                        { text: `Analyze this image and create a prompt for: "${editRequest}". Output ONLY a short prompt.` },
+                                        { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
+                                    ]
+                                }],
+                            generationConfig: {
+                                temperature: 0.3,
+                                maxOutputTokens: 50
+                            }
+                        })
+                    }, 2000);
+                    const analysisData = await analysisResponse.json();
+                    const prompt = analysisData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
+                    // Generate new image with Imagen
+                    editResponse = await fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict', {
+                        method: 'POST',
+                        headers: {
+                            'x-goog-api-key': GOOGLE_API_KEY,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            instances: [{ prompt }],
+                            parameters: {
+                                sampleCount: 1,
+                                sampleImageSize: '1K',
+                                aspectRatio: '1:1'
+                            }
+                        })
+                    }, 5000);
+                    modelUsed = 'Gemini Flash + Imagen 4.0';
+                }
+                if (!editResponse.ok) {
+                    const errorText = await editResponse.text();
+                    throw new Error(`API error: ${editResponse.status} - ${errorText}`);
+                }
+                const editData = await editResponse.json();
+                const editProcessingTime = Date.now() - editStartTime;
+                // Extract image data based on model
+                let editedImageData;
+                if (modelUsed.includes('Imagen')) {
+                    editedImageData = editData.predictions?.[0]?.bytesBase64Encoded;
+                }
+                else {
+                    // Gemini model response
+                    editedImageData = editData.candidates?.[0]?.content?.parts?.find((part) => part.inline_data?.mime_type?.startsWith('image/'))?.inline_data?.data || editData.candidates?.[0]?.content?.parts?.[0]?.text;
+                }
+                if (!editedImageData) {
+                    throw new Error('No edited image received from API');
+                }
+                console.log(`✅ Image editing completed in ${editProcessingTime}ms using ${modelUsed}`);
+                // Create buffer from the edited image
+                const editedImageBuffer = Buffer.from(editedImageData, 'base64');
                 // Delete processing message
                 await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
-                // Send analysis result with instructions
-                const responseMsg = isDobbyEdit
-                    ? `🧙‍♀️ **도비가 이미지를 분석했습니다!**
+                // Send edited image
+                const caption = isDobbyEdit
+                    ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
 
-📸 **원본 이미지**: 분석 완료
+✏️ **주인님의 요청**: "${editRequest}"
+🪄 **도비의 마법 도구**: ${modelUsed}
+
+💰 **비용**: ${formatCost(0.002)}
+⏱️ **처리시간**: ${editProcessingTime}ms
+
+✨ **도비의 편집 결과입니다!**
+
+도비는 주인님이 만족하시길 바랍니다! 🧙‍♀️`
+                    : `🎨 **이미지 편집 완료!**
+
 ✏️ **편집 요청**: "${editRequest}"
-📝 **생성 프롬프트**: "${generatedPrompt}"
+🤖 **AI 편집**: ${modelUsed}
 
-✨ **이제 새 이미지를 생성하려면:**
-👉 \`/generate ${generatedPrompt}\`
+💰 **비용**: ${formatCost(0.002)}
+⏱️ **처리시간**: ${editProcessingTime}ms
 
-💡 **프롬프트를 수정하려면:**
-👉 \`/generate [수정된 프롬프트]\`
-
-⏱️ 분석 시간: ${analysisTime}ms
-🧙‍♀️ 도비가 도와드렸습니다!`
-                    : `✅ **이미지 분석 완료!**
-
-📸 **원본 이미지**: 분석됨
-✏️ **편집 요청**: "${editRequest}"
-📝 **생성 프롬프트**: "${generatedPrompt}"
-
-✨ **새 이미지 생성:**
-👉 \`/generate ${generatedPrompt}\`
-
-💡 **프롬프트 수정:**
-👉 \`/generate [원하는 프롬프트]\`
-
-⏱️ 처리 시간: ${analysisTime}ms`;
-                await ctx.reply(responseMsg, {
-                    reply_to_message_id: ctx.message.message_id,
-                    parse_mode: 'Markdown'
+✨ **편집된 이미지입니다!**`;
+                await ctx.replyWithPhoto(new grammy_1.InputFile(editedImageBuffer), {
+                    caption: caption
                 });
-                console.log('✅ Image analysis completed and sent to user');
+                console.log('✅ Image editing completed and sent to user');
             }
             catch (error) {
                 console.error('❌ Image editing error:', error);
