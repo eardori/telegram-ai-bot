@@ -1021,10 +1021,43 @@ User Request: "${text}"
 
 Output Format: Respond ONLY with the ready-to-use English prompt for the image generation model. Do not include any other text, explanations, or quotation marks.`;
 
-      await ctx.api.editMessageText(ctx.chat.id, thinkingMessage.message_id, '🧠 **AI 비전 분석 중...**\n\nClaude AI가 이미지를 분석하고 새로운 프롬프트를 생성하고 있습니다.');
-      const newImagePrompt = await callClaudeVisionAPI(visionPrompt, imageData, mediaType);
+      await ctx.api.editMessageText(ctx.chat.id, thinkingMessage.message_id, '🧠 **AI 비전 분석 중...**\n\nGemini Vision이 이미지를 분석하고 새로운 프롬프트를 생성하고 있습니다.');
 
-      console.log(`🤖 New Imagen prompt by Claude: "${newImagePrompt}"`);
+      // Use Gemini Vision instead of Claude for image analysis
+      const visionStartTime = Date.now();
+      const visionResponse = await fetchWithTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${GOOGLE_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: visionPrompt },
+                {
+                  inline_data: {
+                    mime_type: mediaType,
+                    data: imageData
+                  }
+                }
+              ]
+            }]
+          })
+        },
+        15000 // 15-second timeout for Gemini Vision
+      );
+
+      if (!visionResponse.ok) {
+        throw new Error(`Gemini Vision API error: ${visionResponse.status}`);
+      }
+
+      const visionData = await visionResponse.json();
+      const newImagePrompt = (visionData as any).candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const visionProcessingTime = Date.now() - visionStartTime;
+
+      console.log(`🤖 New Imagen prompt by Gemini: "${newImagePrompt}"`);
       await ctx.api.editMessageText(ctx.chat.id, thinkingMessage.message_id, `🎨 **새로운 이미지 생성 중...**\n\n프롬프트: "${newImagePrompt}"`);
       const imageResult = await generateImageWithImagen(newImagePrompt);
       const imageBufferNew = Buffer.from(imageResult.imageData, 'base64');
