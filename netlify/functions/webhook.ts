@@ -337,15 +337,17 @@ async function callClaudeVisionAPI(prompt: string, imageData: string, mediaType:
       })
     });
 
-    const data = await response.json();
-
     if (response.ok) {
+      const data = await response.json();
       console.log('🖼️ Claude Vision API call successful!');
       return (data as any).content[0]?.text || '이미지 분석에 실패했습니다.';
     } else {
-      const errorText = await response.text();
-      console.error('Claude Vision API Error Response:', errorText);
-      throw new Error((data as any).error?.message || `Vision API 오류: ${response.status} ${response.statusText}`);
+      const errorData = await response.json().catch(async () => {
+        // If JSON parsing fails, try text
+        return { error: { message: await response.text() } };
+      });
+      console.error('Claude Vision API Error Response:', errorData);
+      throw new Error((errorData as any).error?.message || `Vision API 오류: ${response.status} ${response.statusText}`);
     }
   } catch (error) {
     console.error('Claude Vision API Error:', error);
