@@ -205,7 +205,7 @@ async function generateImageWithImagen(userInput: string, isDobby: boolean = fal
           instances: [{ prompt: enhancedPrompt }],
           parameters: {
             sampleCount: 1,
-            sampleImageSize: '512',  // Reduced from 1K to 512 for faster generation
+            sampleImageSize: '1K',  // Imagen 4.0 requires 1K or 2K
             aspectRatio: '1:1'
           }
         })

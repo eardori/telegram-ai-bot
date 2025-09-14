@@ -334,7 +334,7 @@ export async function archivePrompt(key: string): Promise<void> {
 export async function trackPromptUsage(request: CreatePromptUsageRequest): Promise<void> {
   try {
     const { error } = await supabase
-      .from('prompt_usage')
+      .from('prompt_usage_analytics')
       .insert([{
         prompt_id: request.promptId,
         user_id: request.userId,
@@ -343,7 +343,7 @@ export async function trackPromptUsage(request: CreatePromptUsageRequest): Promi
         tokens_used: request.tokensUsed,
         success: request.success,
         error_message: request.errorMessage,
-        input_variables: request.inputVariables || {}
+        template_variables_used: request.inputVariables || {}
       }]);
     
     if (error) {

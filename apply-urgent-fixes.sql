@@ -1,9 +1,10 @@
 -- URGENT DATABASE FIXES
 -- Run this immediately on Supabase to fix bot functionality
 
--- 1. Add missing column to tracked_messages
+-- 1. Add missing columns to tracked_messages
 ALTER TABLE tracked_messages
-ADD COLUMN IF NOT EXISTS contains_media BOOLEAN DEFAULT FALSE;
+ADD COLUMN IF NOT EXISTS contains_media BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS contains_question BOOLEAN DEFAULT FALSE;
 
 -- 2. Create prompt_usage_analytics table (renamed from prompt_usage)
 CREATE TABLE IF NOT EXISTS prompt_usage_analytics (

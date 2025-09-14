@@ -293,7 +293,7 @@ async function archivePrompt(key) {
 async function trackPromptUsage(request) {
     try {
         const { error } = await supabase_1.supabase
-            .from('prompt_usage')
+            .from('prompt_usage_analytics')
             .insert([{
                 prompt_id: request.promptId,
                 user_id: request.userId,
@@ -302,7 +302,7 @@ async function trackPromptUsage(request) {
                 tokens_used: request.tokensUsed,
                 success: request.success,
                 error_message: request.errorMessage,
-                input_variables: request.inputVariables || {}
+                template_variables_used: request.inputVariables || {}
             }]);
         if (error) {
             console.error('Error tracking prompt usage:', error);
