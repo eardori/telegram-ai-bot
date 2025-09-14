@@ -9,7 +9,7 @@
     "build:skip": "tsc --skipLibCheck --noEmitOnError false",
     "deploy": "netlify deploy --prod",
     "test": "echo 'No tests configured'",
-    "prepare": "echo 'Skipping build for deployment'"
+    "prepare": "echo 'Prepare step completed'"
   },
   "keywords": [
     "telegram",

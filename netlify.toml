@@ -1,6 +1,6 @@
 [build]
   functions = "netlify/functions"
-  command = "echo 'Skipping build - deploying TypeScript directly'"
+  command = "echo 'No build required - TypeScript functions deployed directly'"
   publish = "."
 
 [build.environment]
@@ -12,7 +12,7 @@
 
 [dev]
   functions = "netlify/functions"
-  publish = "dist"
+  publish = "."
   command = "npm run dev"
 
 # Environment variables for development
