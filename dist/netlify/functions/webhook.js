@@ -963,16 +963,19 @@ bot.on('message:text', async (ctx) => {
                 const visionData = await visionResponse.json();
                 const generatedPrompt = visionData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
                 console.log(`📝 Generated prompt: ${generatedPrompt}`);
-                // Step 2: Generate new image with Imagen (5s timeout)
-                const imagenResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${GOOGLE_API_KEY}`, {
+                // Step 2: Generate new image with Imagen 4.0 (5s timeout)
+                const imagenResponse = await fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'x-goog-api-key': GOOGLE_API_KEY,
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({
                         instances: [{ prompt: generatedPrompt }],
                         parameters: {
                             sampleCount: 1,
-                            aspectRatio: "1:1",
-                            outputOptions: { mimeType: "image/png" }
+                            sampleImageSize: '1K',
+                            aspectRatio: '1:1'
                         }
                     })
                 }, 5000 // 5-second timeout
@@ -982,7 +985,7 @@ bot.on('message:text', async (ctx) => {
                     throw new Error(`Imagen API error: ${imagenResponse.status} - ${errorText}`);
                 }
                 const imagenData = await imagenResponse.json();
-                const imageData = imagenData.predictions?.[0]?.base64Image;
+                const imageData = imagenData.predictions?.[0]?.bytesBase64Encoded;
                 const editProcessingTime = Date.now() - editStartTime;
                 if (!imageData) {
                     throw new Error('No image received from Imagen');
@@ -999,7 +1002,7 @@ bot.on('message:text', async (ctx) => {
                     ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
 
 ✏️ **주인님의 요청**: "${editRequest}"
-🪄 **도비의 마법 도구**: Gemini Flash + Imagen 2
+🪄 **도비의 마법 도구**: Gemini Flash + Imagen 4.0
 
 💰 **비용**: ${formatCost(editCost)}
 ⏱️ **처리시간**: ${editProcessingTime}ms
@@ -1010,7 +1013,7 @@ bot.on('message:text', async (ctx) => {
                     : `🎨 **이미지 편집 완료!**
 
 ✏️ **편집 요청**: "${editRequest}"
-🤖 **AI 편집**: Gemini Flash + Imagen 2
+🤖 **AI 편집**: Gemini Flash + Imagen 4.0
 
 💰 **비용**: ${formatCost(editCost)}
 ⏱️ **처리시간**: ${editProcessingTime}ms
