@@ -935,19 +935,11 @@ bot.on('message:text', async (ctx) => {
                 const imageResponse = await fetch(imageUrl);
                 const imageArrayBuffer = await imageResponse.arrayBuffer();
                 const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
-                // Analyze image with Gemini Vision - SIMPLIFIED for speed
-                const analysisPrompt = `User request: "${editRequest}"
-
-Create a SHORT English prompt (max 30 words) that:
-1. Describes main subject
-2. Applies the requested change
-3. Keep it simple
-
-Output ONLY the prompt.`;
-                console.log('🔍 Analyzing image with Gemini Vision...');
-                const visionStartTime = Date.now();
-                // Call Gemini Vision API with timeout
-                const visionResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${GOOGLE_API_KEY}`, {
+                // Use Gemini 2.5 Flash Image (Nano Banana) for direct image editing
+                console.log('🎨 Using Gemini 2.5 Flash Image for direct editing...');
+                const editStartTime = Date.now();
+                // Call Gemini 2.5 Flash Image API with source image and edit prompt
+                const editResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -955,68 +947,51 @@ Output ONLY the prompt.`;
                     body: JSON.stringify({
                         contents: [{
                                 parts: [
-                                    { text: analysisPrompt },
+                                    {
+                                        text: `Edit this image based on the user's request. User request: "${editRequest}". Apply the requested changes while maintaining the original image quality and subjects.`
+                                    },
                                     {
                                         inline_data: {
                                             mime_type: 'image/jpeg',
-                                            data: imageBase64
+                                            data: imageBase64 // Original image as source
                                         }
                                     }
                                 ]
-                            }]
+                            }],
+                        generationConfig: {
+                            responseModalities: ["image"], // Request image output
+                            temperature: 0.4,
+                            maxOutputTokens: 8192
+                        }
                     })
-                }, 5000 // 5-second timeout for faster response
+                }, 8000 // 8-second timeout
                 );
-                if (!visionResponse.ok) {
-                    throw new Error(`Gemini Vision API error: ${visionResponse.status}`);
+                if (!editResponse.ok) {
+                    const errorText = await editResponse.text();
+                    throw new Error(`Gemini 2.5 Flash Image API error: ${editResponse.status} - ${errorText}`);
                 }
-                const visionData = await visionResponse.json();
-                const analysis = visionData.candidates?.[0]?.content?.parts?.[0]?.text;
-                const visionProcessingTime = Date.now() - visionStartTime;
-                const visionCost = calculateGeminiVisionCost();
-                if (!analysis) {
-                    throw new Error('No analysis received from Gemini Vision');
+                const editData = await editResponse.json();
+                const editedImageData = editData.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data;
+                const editProcessingTime = Date.now() - editStartTime;
+                if (!editedImageData) {
+                    throw new Error('No edited image received from Gemini 2.5 Flash Image');
                 }
-                console.log(`📝 Image analysis completed in ${visionProcessingTime}ms, generating enhanced version...`);
-                console.log('🔍 Gemini Vision Analysis:', analysis.substring(0, 300) + '...');
-                // Generate enhanced image with Imagen using Gemini's analysis
-                // The analysis from Gemini already contains a detailed prompt
-                const enhancedPrompt = analysis;
-                // Check remaining time before image generation
-                const elapsedTime = Date.now() - visionStartTime;
-                if (elapsedTime > 3000) {
-                    // If we've already used 3+ seconds, respond with prompt only
-                    // Delete processing message first
-                    await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
-                    await ctx.reply(`✅ **이미지 분석 완료!**
-
-📝 **생성된 프롬프트:**
-"${enhancedPrompt}"
-
-💡 **이미지 생성하기:**
-복사해서 다시 보내주세요:
-\`도비야 ${enhancedPrompt} 그려줘\`
-
-⚠️ 시간 제한으로 분석만 완료했습니다.`);
-                    console.log('⏱️ Timeout prevention: Returned prompt only');
-                    return;
-                }
-                const imageResult = await generateImageWithImagen(enhancedPrompt, false);
+                console.log(`✅ Image editing completed in ${editProcessingTime}ms`);
+                // Create buffer from the edited image
+                const editedImageBuffer = Buffer.from(editedImageData, 'base64');
                 // Delete processing message
                 await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
-                // Calculate total cost
-                const totalCost = visionCost + imageResult.cost;
-                // Send enhanced image with appropriate message
+                // Calculate cost (simplified for single API call)
+                const editCost = 0.002; // Approximate cost for Gemini Flash Image
+                // Send edited image with appropriate message
                 const caption = isDobbyEdit
                     ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
 
 ✏️ **주인님의 요청**: "${editRequest}"
-🪄 **도비의 마법 도구**:
-- 👁️ Gemini Vision (이미지 분석): ${formatCost(visionCost)}
-- 🎨 Google Imagen 4.0 (이미지 생성): ${formatCost(imageResult.cost)}
+🪄 **도비의 마법 도구**: Gemini 2.5 Flash Image (나노바나나)
 
-💰 **총 비용**: ${formatCost(totalCost)}
-⏱️ **처리시간**: 분석 ${visionProcessingTime}ms + 생성 ${imageResult.processingTime}ms
+💰 **비용**: ${formatCost(editCost)}
+⏱️ **처리시간**: ${editProcessingTime}ms
 
 ✨ **도비의 편집 결과입니다!**
 
@@ -1024,18 +999,12 @@ Output ONLY the prompt.`;
                     : `🎨 **이미지 편집 완료!**
 
 ✏️ **편집 요청**: "${editRequest}"
-🤖 **AI 처리 완료**:
-- 👁️ 분석 (Gemini Vision): ${formatCost(visionCost)}
-- 🎨 생성 (Google Imagen 4.0): ${formatCost(imageResult.cost)}
+🤖 **AI 편집**: Gemini 2.5 Flash Image (나노바나나)
 
-💰 **총 비용**: ${formatCost(totalCost)}
-⏱️ **처리시간**: 분석 ${visionProcessingTime}ms + 생성 ${imageResult.processingTime}ms
+💰 **비용**: ${formatCost(editCost)}
+⏱️ **처리시간**: ${editProcessingTime}ms
 
 ✨ **편집된 이미지입니다!**`;
-                // Fix base64 handling
-                const editedImageBuffer = imageResult.imageData.includes('base64,')
-                    ? Buffer.from(imageResult.imageData.split('base64,')[1], 'base64')
-                    : Buffer.from(imageResult.imageData, 'base64');
                 await ctx.replyWithPhoto(new grammy_1.InputFile(editedImageBuffer), {
                     caption: caption
                 });
