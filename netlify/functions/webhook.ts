@@ -269,7 +269,7 @@ async function callClaudeAPI(message: string, maxTokens: number = 2000, temperat
           }]
         })
       },
-      20000 // 20-second timeout for Claude API
+      45000 // 45-second timeout for Claude API (increased from 20s due to timeouts)
     );
 
 
@@ -952,6 +952,11 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
+  // 🚨 CRITICAL: Skip if this is a command - let command handlers process them
+  if (text.startsWith('/')) {
+    console.log(`⚡ Skipping command "${text}" - letting command handlers process it`);
+    return;
+  }
 
   // [NEW] Handle replies to photos for image editing
   if (ctx.message.reply_to_message?.photo) {
