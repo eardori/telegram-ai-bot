@@ -1139,11 +1139,11 @@ bot.on('message:text', async (ctx) => {
                 contents: [{
                   parts: [
                     {
-                      text: `You are an expert image editor. Edit this image according to the following request: "${editRequest}"
+                      text: `Analyze this image and create a detailed prompt for editing it based on: "${editRequest}"
 
-                      IMPORTANT: You must generate an edited version of the provided image, not just describe changes.
-                      Maintain the original composition and subjects while applying the requested modifications.
-                      Be hyper-specific and accurate in your edits.`
+                      Describe the current image in detail, then specify exactly what changes to make.
+                      Output ONLY the editing prompt, no explanations.
+                      Be specific about colors, positions, styles, and elements to preserve or modify.`
                     },
                     {
                       inline_data: {
@@ -1155,8 +1155,7 @@ bot.on('message:text', async (ctx) => {
                 }],
                 generationConfig: {
                   temperature: 0.4,
-                  maxOutputTokens: 8192,
-                  responseMimeType: 'image/jpeg'  // Request image output
+                  maxOutputTokens: 512  // Reduced for prompt generation
                 }
               })
             },
@@ -1164,47 +1163,13 @@ bot.on('message:text', async (ctx) => {
           );
           modelUsed = 'Gemini 2.0 Flash Experimental';
         } catch (error) {
-          console.log('⚠️ Gemini 2.0 Flash Experimental failed, trying Imagen 3 Fast...');
+          console.log('⚠️ Gemini 2.0 Flash Experimental failed:', error);
 
-          // Try Imagen 3 Fast for image editing (supports image-to-image)
-          try {
-            console.log('🔄 Trying Imagen 3 Fast for image editing...');
-            editResponse = await fetchWithTimeout(
-              'https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-capability-preview-0930:predict',
-              {
-                method: 'POST',
-                headers: {
-                  'x-goog-api-key': GOOGLE_API_KEY,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  instances: [{
-                    prompt: editRequest,
-                    image: {
-                      bytesBase64Encoded: imageBase64
-                    }
-                  }],
-                  parameters: {
-                    sampleCount: 1,
-                    mode: 'imageEditing',  // Specify image editing mode
-                    editConfig: {
-                      guidanceScale: 15,
-                      maskMode: 'background'
-                    }
-                  }
-                })
-              },
-              20000 // 20s timeout
-            );
-            modelUsed = 'Imagen 3 Fast (Image Editing)';
-          } catch (imagen3Error) {
-            console.log('⚠️ Imagen 3 Fast failed, using generation fallback...');
+          // Fallback: Use Gemini for analysis then Imagen for generation
+          console.log('🔄 Fallback: Gemini analysis + Imagen generation');
 
-            // Final Fallback: Use analysis + generation approach
-            console.log('🔄 Final Fallback: Analysis + Generation approach');
-
-            // Quick analysis
-            const analysisResponse = await fetchWithTimeout(
+          // First, analyze the image with Gemini
+          const analysisResponse = await fetchWithTimeout(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
             {
               method: 'POST',
@@ -1212,44 +1177,55 @@ bot.on('message:text', async (ctx) => {
               body: JSON.stringify({
                 contents: [{
                   parts: [
-                    { text: `Analyze this image and create a prompt for: "${editRequest}". Output ONLY a short prompt.` },
+                    {
+                      text: `Analyze this image and create a detailed prompt for: "${editRequest}".
+                      Describe what's in the image and how to modify it according to the request.
+                      Output ONLY a concise prompt for image generation.`
+                    },
                     { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
                   ]
                 }],
                 generationConfig: {
                   temperature: 0.3,
-                  maxOutputTokens: 50
+                  maxOutputTokens: 150
                 }
               })
             },
-            10000 // 10s timeout for analysis
+            10000 // 10s timeout
           );
 
-          const analysisData = await analysisResponse.json();
-          const prompt = (analysisData as any).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
-
-          // Generate new image with Imagen
-            editResponse = await fetchWithTimeout(
-              'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict',
-              {
-                method: 'POST',
-                headers: {
-                  'x-goog-api-key': GOOGLE_API_KEY,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  instances: [{ prompt }],
-                  parameters: {
-                    sampleCount: 1,
-                    sampleImageSize: '1K',
-                    aspectRatio: '1:1'
-                  }
-                })
-              },
-              20000 // 20s timeout for generation
-            );
-            modelUsed = 'Gemini Flash + Imagen 4.0 (Generation Fallback)';
+          if (!analysisResponse.ok) {
+            throw new Error('Gemini analysis failed');
           }
+
+          const analysisData = await analysisResponse.json();
+          const editPrompt = (analysisData as any).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
+
+          console.log('📝 Generated edit prompt:', editPrompt);
+
+          // Generate with Imagen 4.0 based on analysis
+          editResponse = await fetchWithTimeout(
+            'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict',
+            {
+              method: 'POST',
+              headers: {
+                'x-goog-api-key': GOOGLE_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                instances: [{
+                  prompt: editPrompt + ' High quality, photorealistic, detailed.'
+                }],
+                parameters: {
+                  sampleCount: 1,
+                  sampleImageSize: '1K',
+                  aspectRatio: '1:1'
+                }
+              })
+            },
+            20000 // 20s timeout
+          );
+          modelUsed = 'Gemini Analysis + Imagen 4.0';
         }
 
         if (!editResponse.ok) {
