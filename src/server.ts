@@ -1,6 +1,10 @@
 import express from 'express';
 import { Bot, webhookCallback } from 'grammy';
 import { handler } from '../netlify/functions/webhook';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,6 +54,14 @@ app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
   console.log(`📨 Webhook endpoint: /webhook`);
   console.log(`🏥 Health check: /`);
+
+  // Log environment status
+  console.log('🔧 Environment variables status:');
+  console.log('  BOT_TOKEN:', process.env.BOT_TOKEN ? '✅ Set' : '❌ Missing');
+  console.log('  GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? '✅ Set' : '❌ Missing');
+  console.log('  CLAUDE_API_KEY:', process.env.CLAUDE_API_KEY ? '✅ Set' : '❌ Missing');
+  console.log('  SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ Set' : '❌ Missing');
+  console.log('  SUPABASE_KEY:', process.env.SUPABASE_KEY ? '✅ Set' : '❌ Missing');
 
   // Set webhook URL if in production
   if (process.env.RENDER_EXTERNAL_URL) {

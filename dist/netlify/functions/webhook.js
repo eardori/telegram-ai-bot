@@ -48,10 +48,10 @@ const error_handler_1 = require("../../src/utils/error-handler");
 const tracking_types_1 = require("../../src/types/tracking.types");
 // Import version management
 const version_manager_1 = require("../../src/utils/version-manager");
-// Environment variables
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+// Environment variables - support both Netlify and Render naming
+const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 // =============================================================================
 // COST CALCULATION FUNCTIONS
 // =============================================================================
@@ -114,8 +114,12 @@ async function fetchWithTimeout(url, options, timeoutMs = 30000) {
         throw error;
     }
 }
-// Create bot instance
-const bot = new grammy_1.Bot(BOT_TOKEN);
+// Create bot instance with validation
+if (!BOT_TOKEN) {
+    console.error('❌ BOT_TOKEN is not set!');
+    console.error('Available env vars:', Object.keys(process.env).filter(k => !k.includes('KEY')));
+}
+const bot = new grammy_1.Bot(BOT_TOKEN || 'dummy-token-for-build');
 // =============================================================================
 // DUPLICATE MESSAGE PREVENTION
 // =============================================================================
