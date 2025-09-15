@@ -1113,7 +1113,7 @@ bot.on('message:text', async (ctx) => {
         // Download image
         console.log('📥 Downloading image from Telegram...');
         const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-        const imageResponse = await fetchWithTimeout(imageUrl, {}, 2000); // 2s timeout for download
+        const imageResponse = await fetchWithTimeout(imageUrl, {}, 10000); // 10s timeout for download
         const imageArrayBuffer = await imageResponse.arrayBuffer();
         const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
         console.log('✅ Image downloaded, size:', imageBase64.length);
@@ -1157,7 +1157,7 @@ bot.on('message:text', async (ctx) => {
                 }
               })
             },
-            6000 // 6-second timeout
+            30000 // 30-second timeout
           );
           modelUsed = 'Gemini 2.5 Flash Image Preview';
         } catch (error) {
@@ -1185,7 +1185,7 @@ bot.on('message:text', async (ctx) => {
                 }
               })
             },
-            1500 // 1.5s timeout for analysis
+            10000 // 10s timeout for analysis
           );
 
           const analysisData = await analysisResponse.json();
@@ -1209,7 +1209,7 @@ bot.on('message:text', async (ctx) => {
                 }
               })
             },
-            3000 // 3s timeout for generation
+            20000 // 20s timeout for generation
           );
           modelUsed = 'Gemini Flash + Imagen 4.0';
         }
@@ -1257,7 +1257,7 @@ bot.on('message:text', async (ctx) => {
                     }
                   })
                 },
-                3000
+                15000 // 15s timeout for final fallback
               );
 
               if (imagenResponse.ok) {
@@ -1530,16 +1530,8 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
       body: event.body
     });
 
-    // Process webhook synchronously but with timeout protection
-    const response = await Promise.race([
-      webhookHandler(request),
-      new Promise<Response>((resolve) =>
-        setTimeout(() => {
-          console.log('⚠️ Webhook processing timeout - returning early');
-          resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-        }, 9500) // 9.5 seconds timeout
-      )
-    ]);
+    // Process webhook normally - no timeout on Render
+    const response = await webhookHandler(request);
 
     console.log('✅ Webhook processed');
 
