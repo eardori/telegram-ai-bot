@@ -7,6 +7,7 @@
     "dev": "netlify dev",
     "build": "tsc --skipLibCheck",
     "build:skip": "tsc --skipLibCheck --noEmitOnError false",
+    "start": "node dist/src/server.js",
     "deploy": "netlify deploy --prod",
     "test": "echo 'No tests configured'",
     "prepare": "echo 'Prepare step completed'"
@@ -27,8 +28,10 @@
   "dependencies": {
     "@netlify/functions": "^2.8.0",
     "@supabase/supabase-js": "^2.57.4",
+    "@types/express": "^5.0.3",
     "@types/node": "^20.14.0",
     "dotenv": "^17.2.2",
+    "express": "^5.1.0",
     "grammy": "^1.25.0",
     "typescript": "^5.5.0"
   },
