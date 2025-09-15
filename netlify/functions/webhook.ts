@@ -1127,11 +1127,11 @@ bot.on('message:text', async (ctx) => {
         let editResponse;
         let modelUsed = '';
 
-        // Try Gemini 2.5 Flash Image Preview for image editing
+        // Try Gemini 2.0 Flash Experimental for actual image editing
         try {
-          console.log('🔄 Trying Gemini 2.5 Flash Image Preview...');
+          console.log('🔄 Trying Gemini 2.0 Flash Experimental for image editing...');
           editResponse = await fetchWithTimeout(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1139,9 +1139,11 @@ bot.on('message:text', async (ctx) => {
                 contents: [{
                   parts: [
                     {
-                      text: `Edit this image based on the request: "${editRequest}".
-                      Be hyper-specific and maintain the original subjects while applying the requested changes.
-                      Provide step-by-step editing to achieve the desired result.`
+                      text: `You are an expert image editor. Edit this image according to the following request: "${editRequest}"
+
+                      IMPORTANT: You must generate an edited version of the provided image, not just describe changes.
+                      Maintain the original composition and subjects while applying the requested modifications.
+                      Be hyper-specific and accurate in your edits.`
                     },
                     {
                       inline_data: {
@@ -1153,21 +1155,56 @@ bot.on('message:text', async (ctx) => {
                 }],
                 generationConfig: {
                   temperature: 0.4,
-                  maxOutputTokens: 8192
+                  maxOutputTokens: 8192,
+                  responseMimeType: 'image/jpeg'  // Request image output
                 }
               })
             },
             30000 // 30-second timeout
           );
-          modelUsed = 'Gemini 2.5 Flash Image Preview';
+          modelUsed = 'Gemini 2.0 Flash Experimental';
         } catch (error) {
-          console.log('⚠️ Gemini 2.5 Flash Image failed, trying fallback...');
+          console.log('⚠️ Gemini 2.0 Flash Experimental failed, trying Imagen 3 Fast...');
 
-          // Fallback: Use analysis + generation approach
-          console.log('🔄 Fallback: Analysis + Generation approach');
+          // Try Imagen 3 Fast for image editing (supports image-to-image)
+          try {
+            console.log('🔄 Trying Imagen 3 Fast for image editing...');
+            editResponse = await fetchWithTimeout(
+              'https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-capability-preview-0930:predict',
+              {
+                method: 'POST',
+                headers: {
+                  'x-goog-api-key': GOOGLE_API_KEY,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  instances: [{
+                    prompt: editRequest,
+                    image: {
+                      bytesBase64Encoded: imageBase64
+                    }
+                  }],
+                  parameters: {
+                    sampleCount: 1,
+                    mode: 'imageEditing',  // Specify image editing mode
+                    editConfig: {
+                      guidanceScale: 15,
+                      maskMode: 'background'
+                    }
+                  }
+                })
+              },
+              20000 // 20s timeout
+            );
+            modelUsed = 'Imagen 3 Fast (Image Editing)';
+          } catch (imagen3Error) {
+            console.log('⚠️ Imagen 3 Fast failed, using generation fallback...');
 
-          // Quick analysis
-          const analysisResponse = await fetchWithTimeout(
+            // Final Fallback: Use analysis + generation approach
+            console.log('🔄 Final Fallback: Analysis + Generation approach');
+
+            // Quick analysis
+            const analysisResponse = await fetchWithTimeout(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
             {
               method: 'POST',
@@ -1192,26 +1229,27 @@ bot.on('message:text', async (ctx) => {
           const prompt = (analysisData as any).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || editRequest;
 
           // Generate new image with Imagen
-          editResponse = await fetchWithTimeout(
-            'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict',
-            {
-              method: 'POST',
-              headers: {
-                'x-goog-api-key': GOOGLE_API_KEY,
-                'Content-Type': 'application/json',
+            editResponse = await fetchWithTimeout(
+              'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict',
+              {
+                method: 'POST',
+                headers: {
+                  'x-goog-api-key': GOOGLE_API_KEY,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  instances: [{ prompt }],
+                  parameters: {
+                    sampleCount: 1,
+                    sampleImageSize: '1K',
+                    aspectRatio: '1:1'
+                  }
+                })
               },
-              body: JSON.stringify({
-                instances: [{ prompt }],
-                parameters: {
-                  sampleCount: 1,
-                  sampleImageSize: '1K',
-                  aspectRatio: '1:1'
-                }
-              })
-            },
-            20000 // 20s timeout for generation
-          );
-          modelUsed = 'Gemini Flash + Imagen 4.0';
+              20000 // 20s timeout for generation
+            );
+            modelUsed = 'Gemini Flash + Imagen 4.0 (Generation Fallback)';
+          }
         }
 
         if (!editResponse.ok) {
@@ -1231,13 +1269,17 @@ bot.on('message:text', async (ctx) => {
           const parts = (editData as any).candidates?.[0]?.content?.parts;
           if (parts) {
             // Look for image data in the response
-            const imagePart = parts.find((part: any) => part.inline_data?.mime_type?.startsWith('image/'));
+            const imagePart = parts.find((part: any) =>
+              part.inline_data?.mime_type?.startsWith('image/') ||
+              part.inlineData?.mimeType?.startsWith('image/')
+            );
             if (imagePart) {
-              editedImageData = imagePart.inline_data.data;
-            } else {
-              // If no image, Gemini returned text - need to use fallback
+              // Handle both possible response formats
+              editedImageData = imagePart.inline_data?.data || imagePart.inlineData?.data;
+            } else if (parts[0]?.text) {
+              // If Gemini returned text, it means image generation failed
               console.log('⚠️ Gemini returned text instead of image, using Imagen fallback');
-              const prompt = parts[0]?.text || editRequest;
+              const prompt = parts[0].text.substring(0, 500) || editRequest;
 
               // Generate with Imagen
               const imagenResponse = await fetchWithTimeout(
