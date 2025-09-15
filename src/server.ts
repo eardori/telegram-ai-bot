@@ -41,7 +41,11 @@ app.post('/webhook', express.json(), async (req, res) => {
     const response = await handler(event as any, {} as any);
 
     // Send response
-    res.status(response.statusCode).json(JSON.parse(response.body));
+    if (response && response.statusCode && response.body) {
+      res.status(response.statusCode).json(JSON.parse(response.body));
+    } else {
+      res.status(200).json({ ok: true });
+    }
     console.log('✅ Webhook processed successfully');
   } catch (error) {
     console.error('❌ Webhook error:', error);
