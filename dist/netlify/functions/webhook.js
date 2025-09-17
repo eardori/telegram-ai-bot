@@ -39,6 +39,13 @@ const grammy_1 = require("grammy");
 const CLAUDE_MODEL = 'claude-3-5-sonnet-20241022';
 const IMAGEN_MODEL = 'imagen-4.0-generate-001';
 const ANTHROPIC_VERSION = '2023-06-01';
+// Gemini Files API Configuration
+const FILES_API_THRESHOLD = 15 * 1024 * 1024; // 15MB threshold for Files API
+const GEMINI_MODELS = {
+    IMAGE_PREVIEW: 'gemini-2.5-flash-image-preview',
+    FLASH_EXP: 'gemini-2.0-flash-exp',
+    FLASH: 'gemini-1.5-flash'
+};
 // Import prompt management utilities
 const prompt_manager_1 = require("../../src/utils/prompt-manager");
 // Import tracking system
@@ -81,6 +88,13 @@ function calculateGeminiVisionCost() {
     return 0.00025;
 }
 /**
+ * Calculate cost for Gemini Files API usage
+ * Pricing: ~$0.0005 per image upload + processing cost
+ */
+function calculateGeminiFilesCost() {
+    return 0.0005;
+}
+/**
  * Format cost display for users
  */
 function formatCost(cost) {
@@ -88,6 +102,123 @@ function formatCost(cost) {
         return '< $0.001';
     }
     return `$${cost.toFixed(3)}`;
+}
+// =============================================================================
+// GEMINI FILES API INTEGRATION
+// =============================================================================
+/**
+ * Upload image to Gemini Files API for processing large images (>15MB)
+ * @param imageBuffer - Buffer containing image data
+ * @param mimeType - MIME type of the image (e.g., 'image/jpeg')
+ * @returns Promise resolving to file upload response
+ */
+async function uploadToGeminiFiles(imageBuffer, mimeType) {
+    console.log(`📤 Uploading image to Gemini Files API (${imageBuffer.length} bytes, ${mimeType})`);
+    const startTime = Date.now();
+    try {
+        // Create multipart form data
+        const formData = new FormData();
+        // Add metadata
+        formData.append('metadata', JSON.stringify({
+            file: {
+                displayName: `telegram_image_${Date.now()}`
+            }
+        }));
+        // Add the image file
+        const blob = new Blob([imageBuffer], { type: mimeType });
+        formData.append('file', blob);
+        const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${GOOGLE_API_KEY}`, {
+            method: 'POST',
+            body: formData
+        }, 30000 // 30-second timeout for upload
+        );
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Files API upload failed: ${response.status} - ${errorText}`);
+        }
+        const fileData = await response.json();
+        const uploadTime = Date.now() - startTime;
+        console.log(`✅ File uploaded successfully in ${uploadTime}ms:`, {
+            uri: fileData.file?.uri,
+            name: fileData.file?.name,
+            size: imageBuffer.length
+        });
+        return {
+            uri: fileData.file?.uri,
+            name: fileData.file?.name
+        };
+    }
+    catch (error) {
+        console.error('❌ Gemini Files API upload error:', error);
+        throw error;
+    }
+}
+/**
+ * Delete file from Gemini Files API after processing
+ * @param fileUri - URI of the file to delete
+ */
+async function deleteGeminiFile(fileUri) {
+    try {
+        console.log(`🗑️ Cleaning up Gemini file: ${fileUri}`);
+        const response = await fetchWithTimeout(`${fileUri}?key=${GOOGLE_API_KEY}`, {
+            method: 'DELETE'
+        }, 10000 // 10-second timeout for deletion
+        );
+        if (response.ok) {
+            console.log(`✅ File deleted successfully: ${fileUri}`);
+        }
+        else {
+            console.warn(`⚠️ File deletion failed (${response.status}), but continuing...`);
+        }
+    }
+    catch (error) {
+        console.warn('⚠️ File cleanup failed (but continuing):', error);
+        // Don't throw - cleanup failure shouldn't stop the main flow
+    }
+}
+/**
+ * Process image using Gemini Files API with file URI
+ * @param fileUri - URI of the uploaded file
+ * @param editRequest - The editing request from user
+ * @param modelName - Gemini model to use
+ * @returns Promise resolving to API response
+ */
+async function processImageWithFilesAPI(fileUri, editRequest, modelName) {
+    console.log(`🔄 Processing image with Files API using ${modelName}`);
+    const requestBody = {
+        contents: [{
+                parts: [
+                    {
+                        text: modelName.includes('2.5-flash-image-preview')
+                            ? `Edit this image: ${editRequest}
+
+Please modify the image directly according to this request.
+Apply the changes while preserving the original composition, style, and subjects.
+Make specific edits to fulfill the request accurately.`
+                            : `You are an image editor. Edit this image based on: "${editRequest}"
+
+Modify the image to fulfill this request while maintaining the original subjects and composition.
+Apply the specific changes requested.`
+                    },
+                    {
+                        fileData: {
+                            mimeType: "image/jpeg",
+                            fileUri: fileUri
+                        }
+                    }
+                ]
+            }],
+        generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 8192
+        }
+    };
+    return await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GOOGLE_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+    }, 30000 // 30-second timeout
+    );
 }
 // =============================================================================
 // ENHANCED FETCH WITH TIMEOUT
@@ -964,6 +1095,9 @@ bot.on('message:text', async (ctx) => {
                 console.log('🔄 Getting file info from Telegram API...');
                 const file = await ctx.api.getFile(photo.file_id);
                 console.log('📁 File path:', file.file_path);
+                // Declare variables at the start of the try block
+                let uploadedFileUri = null;
+                let useFilesAPI = false;
                 if (!file.file_path) {
                     console.error('❌ No file path received from Telegram');
                     await ctx.reply('❌ 이미지 파일을 가져올 수 없습니다.');
@@ -992,63 +1126,52 @@ bot.on('message:text', async (ctx) => {
                 const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
                 const imageResponse = await fetchWithTimeout(imageUrl, {}, 10000); // 10s timeout for download
                 const imageArrayBuffer = await imageResponse.arrayBuffer();
-                const imageBase64 = Buffer.from(imageArrayBuffer).toString('base64');
-                console.log('✅ Image downloaded, size:', imageBase64.length);
+                const imageBuffer = Buffer.from(imageArrayBuffer);
+                const imageBase64 = imageBuffer.toString('base64');
+                console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
+                // Determine if we should use Files API based on size (15MB limit for inline data)
+                useFilesAPI = imageBuffer.length > FILES_API_THRESHOLD;
+                console.log(`📊 Image size analysis:`, {
+                    sizeBytes: imageBuffer.length,
+                    sizeMB: (imageBuffer.length / (1024 * 1024)).toFixed(2),
+                    threshold: (FILES_API_THRESHOLD / (1024 * 1024)).toFixed(0) + 'MB',
+                    useFilesAPI: useFilesAPI,
+                    method: useFilesAPI ? 'Files API (Large Image)' : 'Inline Data (Standard)'
+                });
                 // Use Gemini for real image editing
                 console.log('🎨 Starting real image editing with Gemini...');
                 const editStartTime = Date.now();
+                // uploadedFileUri already declared above
                 // Try multiple Gemini models for image editing
                 let editResponse;
                 let modelUsed = '';
                 // Try Gemini 2.5 Flash Image Preview for actual image editing
                 try {
                     console.log('🔄 Trying Gemini 2.5 Flash Image Preview for direct image editing...');
-                    editResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{
-                                    parts: [
-                                        {
-                                            text: `Edit this image: ${editRequest}
-
-                      Please modify the image directly according to this request.
-                      Apply the changes while preserving the original composition, style, and subjects.
-                      Make specific edits to fulfill the request accurately.`
-                                        },
-                                        {
-                                            inline_data: {
-                                                mime_type: 'image/jpeg',
-                                                data: imageBase64
-                                            }
-                                        }
-                                    ]
-                                }],
-                            generationConfig: {
-                                temperature: 0.4,
-                                maxOutputTokens: 8192
-                            }
-                        })
-                    }, 30000 // 30-second timeout
-                    );
-                    modelUsed = 'Gemini 2.5 Flash Image Preview';
-                }
-                catch (error) {
-                    console.log('⚠️ Gemini 2.5 Flash Image Preview failed:', error);
-                    // Try Gemini 2.0 Flash Experimental as second attempt
-                    try {
-                        console.log('🔄 Trying Gemini 2.0 Flash Experimental as fallback...');
-                        editResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`, {
+                    // Upload file if using Files API
+                    if (useFilesAPI && !uploadedFileUri) {
+                        console.log('📤 Uploading large image to Files API...');
+                        const uploadResult = await uploadToGeminiFiles(imageBuffer, 'image/jpeg');
+                        uploadedFileUri = uploadResult.uri;
+                        console.log('✅ Image uploaded to Files API:', uploadedFileUri);
+                    }
+                    // Use Files API or inline data based on image size
+                    if (useFilesAPI && uploadedFileUri) {
+                        editResponse = await processImageWithFilesAPI(uploadedFileUri, editRequest, 'gemini-2.5-flash-image-preview');
+                    }
+                    else {
+                        editResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${GOOGLE_API_KEY}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 contents: [{
                                         parts: [
                                             {
-                                                text: `You are an image editor. Edit this image based on: "${editRequest}"
+                                                text: `Edit this image: ${editRequest}
 
-                        Modify the image to fulfill this request while maintaining the original subjects and composition.
-                        Apply the specific changes requested.`
+                        Please modify the image directly according to this request.
+                        Apply the changes while preserving the original composition, style, and subjects.
+                        Make specific edits to fulfill the request accurately.`
                                             },
                                             {
                                                 inline_data: {
@@ -1063,36 +1186,124 @@ bot.on('message:text', async (ctx) => {
                                     maxOutputTokens: 8192
                                 }
                             })
-                        }, 25000 // 25-second timeout
+                        }, 30000 // 30-second timeout
                         );
-                        modelUsed = 'Gemini 2.0 Flash Experimental';
+                    }
+                    modelUsed = 'Gemini 2.5 Flash Image Preview' + (useFilesAPI ? ' (Files API)' : '');
+                }
+                catch (error) {
+                    console.log('⚠️ Gemini 2.5 Flash Image Preview failed:', error);
+                    // Try Gemini 2.0 Flash Experimental as second attempt
+                    try {
+                        console.log('🔄 Trying Gemini 2.0 Flash Experimental as fallback...');
+                        // Upload file if using Files API and not already uploaded
+                        if (useFilesAPI && !uploadedFileUri) {
+                            console.log('📤 Uploading large image to Files API for fallback...');
+                            const uploadResult = await uploadToGeminiFiles(imageBuffer, 'image/jpeg');
+                            uploadedFileUri = uploadResult.uri;
+                            console.log('✅ Image uploaded to Files API:', uploadedFileUri);
+                        }
+                        // Use Files API or inline data based on image size
+                        if (useFilesAPI && uploadedFileUri) {
+                            editResponse = await processImageWithFilesAPI(uploadedFileUri, editRequest, 'gemini-2.0-flash-exp');
+                        }
+                        else {
+                            editResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{
+                                            parts: [
+                                                {
+                                                    text: `You are an image editor. Edit this image based on: "${editRequest}"
+
+                          Modify the image to fulfill this request while maintaining the original subjects and composition.
+                          Apply the specific changes requested.`
+                                                },
+                                                {
+                                                    inline_data: {
+                                                        mime_type: 'image/jpeg',
+                                                        data: imageBase64
+                                                    }
+                                                }
+                                            ]
+                                        }],
+                                    generationConfig: {
+                                        temperature: 0.4,
+                                        maxOutputTokens: 8192
+                                    }
+                                })
+                            }, 25000 // 25-second timeout
+                            );
+                        }
+                        modelUsed = 'Gemini 2.0 Flash Experimental' + (useFilesAPI ? ' (Files API)' : '');
                     }
                     catch (exp2Error) {
                         console.log('⚠️ Gemini 2.0 Flash Experimental also failed:', exp2Error);
                         // Final Fallback: Use Gemini for analysis then Imagen for generation
                         console.log('🔄 Final Fallback: Gemini analysis + Imagen generation');
                         // First, analyze the image with Gemini
-                        const analysisResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                contents: [{
-                                        parts: [
-                                            {
-                                                text: `Analyze this image and create a detailed prompt for: "${editRequest}".
-                      Describe what's in the image and how to modify it according to the request.
-                      Output ONLY a concise prompt for image generation.`
-                                            },
-                                            { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
-                                        ]
-                                    }],
-                                generationConfig: {
-                                    temperature: 0.3,
-                                    maxOutputTokens: 150
-                                }
-                            })
-                        }, 10000 // 10s timeout
-                        );
+                        // Upload file if using Files API and not already uploaded
+                        if (useFilesAPI && !uploadedFileUri) {
+                            console.log('📤 Uploading large image to Files API for analysis...');
+                            const uploadResult = await uploadToGeminiFiles(imageBuffer, 'image/jpeg');
+                            uploadedFileUri = uploadResult.uri;
+                            console.log('✅ Image uploaded to Files API:', uploadedFileUri);
+                        }
+                        let analysisResponse;
+                        if (useFilesAPI && uploadedFileUri) {
+                            // Use Files API for analysis
+                            analysisResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{
+                                            parts: [
+                                                {
+                                                    text: `Analyze this image and create a detailed prompt for: "${editRequest}".
+                        Describe what's in the image and how to modify it according to the request.
+                        Output ONLY a concise prompt for image generation.`
+                                                },
+                                                {
+                                                    fileData: {
+                                                        mimeType: "image/jpeg",
+                                                        fileUri: uploadedFileUri
+                                                    }
+                                                }
+                                            ]
+                                        }],
+                                    generationConfig: {
+                                        temperature: 0.3,
+                                        maxOutputTokens: 150
+                                    }
+                                })
+                            }, 10000 // 10s timeout
+                            );
+                        }
+                        else {
+                            // Use inline data for smaller images
+                            analysisResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{
+                                            parts: [
+                                                {
+                                                    text: `Analyze this image and create a detailed prompt for: "${editRequest}".
+                        Describe what's in the image and how to modify it according to the request.
+                        Output ONLY a concise prompt for image generation.`
+                                                },
+                                                { inline_data: { mime_type: 'image/jpeg', data: imageBase64 } }
+                                            ]
+                                        }],
+                                    generationConfig: {
+                                        temperature: 0.3,
+                                        maxOutputTokens: 150
+                                    }
+                                })
+                            }, 10000 // 10s timeout
+                            );
+                        }
                         if (!analysisResponse.ok) {
                             throw new Error('Gemini analysis failed');
                         }
@@ -1118,7 +1329,18 @@ bot.on('message:text', async (ctx) => {
                             })
                         }, 20000 // 20s timeout
                         );
-                        modelUsed = 'Gemini Analysis + Imagen 4.0';
+                        modelUsed = useFilesAPI
+                            ? 'Gemini Analysis (Files API) + Imagen 4.0'
+                            : 'Gemini Analysis (Inline) + Imagen 4.0';
+                    }
+                }
+                finally {
+                    // Clean up uploaded file if it was used
+                    if (uploadedFileUri) {
+                        // Don't await - let cleanup happen in background
+                        deleteGeminiFile(uploadedFileUri).catch(error => {
+                            console.warn('Background file cleanup failed:', error);
+                        });
                     }
                 }
                 if (!editResponse.ok) {
@@ -1198,14 +1420,19 @@ bot.on('message:text', async (ctx) => {
                 const editedImageBuffer = Buffer.from(editedImageData, 'base64');
                 // Delete processing message
                 await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
-                // Send edited image
+                // Calculate cost based on method used
+                const baseCost = 0.002; // Base processing cost
+                const filesCost = useFilesAPI ? calculateGeminiFilesCost() : 0; // Additional Files API cost
+                const estimatedCost = baseCost + filesCost;
+                // Send edited image with enhanced information
                 const caption = isDobbyEdit
                     ? `🧙‍♀️ **도비가 마법으로 편집을 완료했습니다!**
 
 ✏️ **주인님의 요청**: "${editRequest}"
 🪄 **도비의 마법 도구**: ${modelUsed}
+📊 **처리 방식**: ${useFilesAPI ? 'Files API (대용량)' : 'Inline Data (표준)'}
 
-💰 **비용**: ${formatCost(0.002)}
+💰 **비용**: ${formatCost(estimatedCost)}
 ⏱️ **처리시간**: ${editProcessingTime}ms
 
 ✨ **도비의 편집 결과입니다!**
@@ -1215,8 +1442,9 @@ bot.on('message:text', async (ctx) => {
 
 ✏️ **편집 요청**: "${editRequest}"
 🤖 **AI 편집**: ${modelUsed}
+📊 **처리 방식**: ${useFilesAPI ? 'Files API (대용량)' : 'Inline Data (표준)'}
 
-💰 **비용**: ${formatCost(0.002)}
+💰 **비용**: ${formatCost(estimatedCost)}
 ⏱️ **처리시간**: ${editProcessingTime}ms
 
 ✨ **편집된 이미지입니다!**`;
@@ -1233,9 +1461,13 @@ bot.on('message:text', async (ctx) => {
 
 💡 **다시 시도해보세요:**
 - 이미지에 reply로 "편집해줘", "보정해줘", "개선해줘" 등으로 요청
-- 구체적인 편집 내용을 명시하면 더 좋습니다`);
+- 구체적인 편집 내용을 명시하면 더 좋습니다
+- 대용량 이미지는 Files API로 자동 처리됩니다`);
             }
             return; // Exit after handling image editing
+        }
+        else {
+            console.log('💬 Reply to photo but no editing keywords detected');
         }
     }
     // Check for Dobby activation and other commands
