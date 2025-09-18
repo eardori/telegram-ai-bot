@@ -1357,6 +1357,12 @@ bot.on('message:text', async (ctx) => {
                     hasPredictions: !!editData.predictions,
                     fullResponse: JSON.stringify(editData).substring(0, 500) // Log first 500 chars for debugging
                 });
+                // Check for IMAGE_SAFETY rejection
+                const finishReason = editData.candidates?.[0]?.finishReason;
+                if (finishReason === 'IMAGE_SAFETY') {
+                    console.log('⚠️ Image editing blocked by safety filter');
+                    throw new Error('IMAGE_SAFETY: Content blocked by safety filters');
+                }
                 // Extract image data based on model
                 let editedImageData;
                 if (modelUsed.includes('Imagen')) {
@@ -1460,14 +1466,31 @@ bot.on('message:text', async (ctx) => {
             }
             catch (error) {
                 console.error('❌ Image editing error:', error);
-                await ctx.reply(`❌ **이미지 편집 실패**
+                // Check if it's a safety error
+                const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+                const isSafetyError = errorMessage.includes('IMAGE_SAFETY');
+                if (isSafetyError) {
+                    await ctx.reply(`⚠️ **안전 필터에 의해 차단됨**
 
-오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}
+요청하신 편집 내용이 Google AI의 안전 정책에 위반됩니다.
+
+💡 **다른 방법으로 시도해보세요:**
+- 더 순화된 표현으로 요청해주세요
+- 예: "의상을 캐주얼한 옷으로 변경"
+- 예: "옷 색상을 파란색으로 변경"
+
+🔒 차단된 내용: 노출이 많은 의상, 성적 콘텐츠 등`);
+                }
+                else {
+                    await ctx.reply(`❌ **이미지 편집 실패**
+
+오류: ${errorMessage}
 
 💡 **다시 시도해보세요:**
 - 이미지에 reply로 "편집해줘", "보정해줘", "개선해줘" 등으로 요청
 - 구체적인 편집 내용을 명시하면 더 좋습니다
 - 대용량 이미지는 Files API로 자동 처리됩니다`);
+                }
             }
             return; // Exit after handling image editing
         }
