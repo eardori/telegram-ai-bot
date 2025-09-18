@@ -25,31 +25,38 @@ app.post('/webhook', express_1.default.json(), async (req, res) => {
         body: JSON.stringify(req.body).substring(0, 200) + '...',
         headers: req.headers
     });
-    try {
-        // Convert Express request to Netlify-style event
-        const event = {
-            httpMethod: req.method,
-            headers: req.headers,
-            body: JSON.stringify(req.body),
-            isBase64Encoded: false,
-            path: req.path,
-            queryStringParameters: req.query
-        };
-        // Call the existing webhook handler
-        const response = await (0, webhook_1.handler)(event, {});
-        // Send response
-        if (response && response.statusCode && response.body) {
-            res.status(response.statusCode).json(JSON.parse(response.body));
+    // Send immediate response to Telegram to prevent timeout
+    res.status(200).json({ ok: true });
+    console.log('✅ Sent immediate 200 response to Telegram');
+    // Process webhook in background
+    setImmediate(async () => {
+        try {
+            // Convert Express request to Netlify-style event
+            const event = {
+                httpMethod: req.method,
+                headers: req.headers,
+                body: JSON.stringify(req.body),
+                isBase64Encoded: false,
+                path: req.path,
+                queryStringParameters: req.query
+            };
+            // Call the existing webhook handler
+            const response = await (0, webhook_1.handler)(event, {});
+            if (response && 'statusCode' in response && response.statusCode === 200) {
+                console.log('✅ Webhook processed successfully in background');
+            }
+            else if (response && 'statusCode' in response) {
+                console.log('⚠️ Webhook processing completed with status:', response.statusCode);
+            }
+            else {
+                console.log('⚠️ Webhook processing completed without response');
+            }
         }
-        else {
-            res.status(200).json({ ok: true });
+        catch (error) {
+            console.error('❌ Background webhook processing error:', error);
+            // Don't need to send response since we already sent 200
         }
-        console.log('✅ Webhook processed successfully');
-    }
-    catch (error) {
-        console.error('❌ Webhook error:', error);
-        res.status(200).json({ ok: true }); // Return 200 to prevent Telegram retry
-    }
+    });
 });
 // Start server
 app.listen(PORT, () => {

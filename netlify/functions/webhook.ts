@@ -1358,8 +1358,28 @@ bot.on('message:text', async (ctx) => {
             );
           }
           modelUsed = 'Gemini 2.5 Flash Image Preview' + (useFilesAPI ? ' (Files API)' : '');
+
+          // Check if we actually got an image response
+          if (editResponse.ok) {
+            const tempData = await editResponse.json();
+            const tempParts = (tempData as any).candidates?.[0]?.content?.parts;
+            const hasImage = tempParts?.some((p: any) =>
+              p.inline_data || p.inlineData
+            );
+
+            if (!hasImage) {
+              console.log('⚠️ Gemini 2.5 returned text instead of image, throwing to trigger fallback');
+              throw new Error('Gemini returned text instead of edited image');
+            }
+
+            // If we have image, use the response
+            editResponse = {
+              ok: true,
+              json: async () => tempData
+            } as Response;
+          }
         } catch (error) {
-          console.log('⚠️ Gemini 2.5 Flash Image Preview failed:', error);
+          console.log('⚠️ Gemini 2.5 Flash Image Preview failed or returned text:', error);
 
           // Try Gemini 2.0 Flash Experimental as second attempt
           try {
@@ -1413,8 +1433,28 @@ bot.on('message:text', async (ctx) => {
               );
             }
             modelUsed = 'Gemini 2.0 Flash Experimental' + (useFilesAPI ? ' (Files API)' : '');
+
+            // Check if we actually got an image response
+            if (editResponse.ok) {
+              const tempData = await editResponse.json();
+              const tempParts = (tempData as any).candidates?.[0]?.content?.parts;
+              const hasImage = tempParts?.some((p: any) =>
+                p.inline_data || p.inlineData
+              );
+
+              if (!hasImage) {
+                console.log('⚠️ Gemini 2.0 also returned text instead of image, throwing to trigger final fallback');
+                throw new Error('Gemini 2.0 returned text instead of edited image');
+              }
+
+              // If we have image, use the response
+              editResponse = {
+                ok: true,
+                json: async () => tempData
+              } as Response;
+            }
           } catch (exp2Error) {
-            console.log('⚠️ Gemini 2.0 Flash Experimental also failed:', exp2Error);
+            console.log('⚠️ Gemini 2.0 Flash Experimental also failed or returned text:', exp2Error);
 
           // Final Fallback: Use Gemini for analysis then Imagen for generation
           console.log('🔄 Final Fallback: Gemini analysis + Imagen generation');
@@ -1545,7 +1585,8 @@ bot.on('message:text', async (ctx) => {
           model: modelUsed,
           hasCandidates: !!(editData as any).candidates,
           candidatesCount: (editData as any).candidates?.length,
-          hasPredictions: !!(editData as any).predictions
+          hasPredictions: !!(editData as any).predictions,
+          fullResponse: JSON.stringify(editData).substring(0, 500) // Log first 500 chars for debugging
         });
 
         // Extract image data based on model
@@ -1555,12 +1596,16 @@ bot.on('message:text', async (ctx) => {
           console.log('📸 Imagen response - Image data found:', !!editedImageData);
         } else {
           // Gemini model response - check if it returned an image or text
-          const parts = (editData as any).candidates?.[0]?.content?.parts;
-          console.log('📊 Gemini response parts:', {
+          const candidates = (editData as any).candidates;
+          const parts = candidates?.[0]?.content?.parts;
+
+          console.log('📊 Gemini response analysis:', {
+            hasContent: !!candidates?.[0]?.content,
             partsCount: parts?.length,
             partsTypes: parts?.map((p: any) =>
               p.inline_data ? 'image' : p.inlineData ? 'image' : p.text ? 'text' : 'unknown'
-            )
+            ),
+            firstPartKeys: parts?.[0] ? Object.keys(parts[0]) : null
           });
 
           if (parts) {
