@@ -194,11 +194,11 @@ async function processImageWithFilesAPI(
       parts: [
         {
           text: modelName.includes('2.5-flash-image-preview')
-            ? `Edit this image: ${editRequest}
+            ? `Generate an edited version of this image with the following modification: ${editRequest}
 
-Please modify the image directly according to this request.
-Apply the changes while preserving the original composition, style, and subjects.
-Make specific edits to fulfill the request accurately.`
+Important: You must return the edited image itself, not a text description.
+Apply the requested changes directly to the image while preserving the original subjects and composition.
+Output: Modified image with the requested changes applied.`
             : `You are an image editor. Edit this image based on: "${editRequest}"
 
 Modify the image to fulfill this request while maintaining the original subjects and composition.
@@ -1334,11 +1334,11 @@ bot.on('message:text', async (ctx) => {
                   contents: [{
                     parts: [
                       {
-                        text: `Edit this image: ${editRequest}
+                        text: `Generate an edited version of this image with the following modification: ${editRequest}
 
-                        Please modify the image directly according to this request.
-                        Apply the changes while preserving the original composition, style, and subjects.
-                        Make specific edits to fulfill the request accurately.`
+                        Important: You must return the edited image itself, not a text description.
+                        Apply the requested changes directly to the image while preserving the original subjects and composition.
+                        Output: Modified image with the requested changes applied.`
                       },
                       {
                         inline_data: {
@@ -1359,25 +1359,7 @@ bot.on('message:text', async (ctx) => {
           }
           modelUsed = 'Gemini 2.5 Flash Image Preview' + (useFilesAPI ? ' (Files API)' : '');
 
-          // Check if we actually got an image response
-          if (editResponse.ok) {
-            const tempData = await editResponse.json();
-            const tempParts = (tempData as any).candidates?.[0]?.content?.parts;
-            const hasImage = tempParts?.some((p: any) =>
-              p.inline_data || p.inlineData
-            );
-
-            if (!hasImage) {
-              console.log('⚠️ Gemini 2.5 returned text instead of image, throwing to trigger fallback');
-              throw new Error('Gemini returned text instead of edited image');
-            }
-
-            // If we have image, use the response
-            editResponse = {
-              ok: true,
-              json: async () => tempData
-            } as Response;
-          }
+          // Trust that Gemini will return an image with the improved prompt
         } catch (error) {
           console.log('⚠️ Gemini 2.5 Flash Image Preview failed or returned text:', error);
 
@@ -1433,26 +1415,6 @@ bot.on('message:text', async (ctx) => {
               );
             }
             modelUsed = 'Gemini 2.0 Flash Experimental' + (useFilesAPI ? ' (Files API)' : '');
-
-            // Check if we actually got an image response
-            if (editResponse.ok) {
-              const tempData = await editResponse.json();
-              const tempParts = (tempData as any).candidates?.[0]?.content?.parts;
-              const hasImage = tempParts?.some((p: any) =>
-                p.inline_data || p.inlineData
-              );
-
-              if (!hasImage) {
-                console.log('⚠️ Gemini 2.0 also returned text instead of image, throwing to trigger final fallback');
-                throw new Error('Gemini 2.0 returned text instead of edited image');
-              }
-
-              // If we have image, use the response
-              editResponse = {
-                ok: true,
-                json: async () => tempData
-              } as Response;
-            }
           } catch (exp2Error) {
             console.log('⚠️ Gemini 2.0 Flash Experimental also failed or returned text:', exp2Error);
 
