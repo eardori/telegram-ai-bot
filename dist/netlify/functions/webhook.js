@@ -55,6 +55,8 @@ const error_handler_1 = require("../../src/utils/error-handler");
 const tracking_types_1 = require("../../src/types/tracking.types");
 // Import version management
 const version_manager_1 = require("../../src/utils/version-manager");
+// Import image editing handlers
+const image_edit_handler_1 = require("../../src/handlers/image-edit-handler");
 // Environment variables - support both Netlify and Render naming
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
@@ -341,7 +343,7 @@ async function generateImageWithImagen(userInput, isDobby = false, userId, chatI
                     aspectRatio: '1:1'
                 }
             })
-        }, 8000 // 8-second timeout to fit within Netlify's 10-second limit
+        }, 20000 // 20-second timeout for Render.com (30-second limit)
         );
         if (!response.ok) {
             const errorText = await response.text();
@@ -545,7 +547,7 @@ function isDobbyActivated(text) {
     }
     const content = match[1].trim();
     // Check for help commands
-    if (/(사용법|도움말|사용방법|어떻게|메뉴얼|가이드|명령어)/i.test(content)) {
+    if (/(사용법|도움말|사용방법|메뉴얼|가이드|명령어 알려|도움 줘|help)/i.test(content)) {
         return { activated: true, command: 'help', content: content };
     }
     // Check for image generation commands
@@ -1633,6 +1635,8 @@ ${helpMessage}
     // Only slash commands and messages with "도비야" should trigger responses
     console.log(`💭 Regular message (not Dobby command): "${text}" - no response`);
 });
+// Register image editing handlers
+(0, image_edit_handler_1.registerImageEditHandlers)(bot);
 // Debug middleware - log ALL messages
 bot.use(async (ctx, next) => {
     console.log('🔍 DEBUG - Message type:', ctx.message?.text ? 'text' : ctx.message?.photo ? 'photo' : 'other');

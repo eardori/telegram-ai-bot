@@ -28,6 +28,9 @@ import { TrackingError } from '../../src/types/tracking.types';
 // Import version management
 import { getVersionInfoForHelp, getFormattedVersionHistory } from '../../src/utils/version-manager';
 
+// Import image editing handlers
+import { registerImageEditHandlers } from '../../src/handlers/image-edit-handler';
+
 // Environment variables - support both Netlify and Render naming
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
@@ -1882,6 +1885,9 @@ ${helpMessage}
   // Only slash commands and messages with "도비야" should trigger responses
   console.log(`💭 Regular message (not Dobby command): "${text}" - no response`);
 });
+
+// Register image editing handlers
+registerImageEditHandlers(bot);
 
 // Debug middleware - log ALL messages
 bot.use(async (ctx, next) => {
