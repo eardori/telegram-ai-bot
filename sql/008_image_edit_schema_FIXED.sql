@@ -1,7 +1,8 @@
 -- =============================================================================
--- AI IMAGE EDITING FEATURE - DATABASE SCHEMA
--- Version: 1.0.0
+-- AI IMAGE EDITING FEATURE - DATABASE SCHEMA (FIXED VERSION)
+-- Version: 1.0.1
 -- Description: Schema for intelligent photo editing with 38 prompt templates
+-- Fixed: Moved INDEX statements outside CREATE TABLE for PostgreSQL compatibility
 -- =============================================================================
 
 -- Enable UUID extension if not already enabled
@@ -59,10 +60,10 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
 );
 
 -- Indexes for prompt_templates
-CREATE INDEX idx_prompt_templates_category ON prompt_templates (category);
-CREATE INDEX idx_prompt_templates_priority ON prompt_templates (priority DESC);
-CREATE INDEX idx_prompt_templates_usage ON prompt_templates (usage_count DESC);
-CREATE INDEX idx_prompt_templates_success_rate ON prompt_templates (success_rate DESC);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_category ON prompt_templates (category);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_priority ON prompt_templates (priority DESC);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_usage ON prompt_templates (usage_count DESC);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_success_rate ON prompt_templates (success_rate DESC);
 
 -- =============================================================================
 -- 2. IMAGE ANALYSIS RESULTS TABLE
@@ -103,9 +104,9 @@ CREATE TABLE IF NOT EXISTS image_analysis_results (
 );
 
 -- Indexes for image_analysis_results
-CREATE INDEX idx_analysis_user_id ON image_analysis_results (user_id);
-CREATE INDEX idx_analysis_session_id ON image_analysis_results (session_id);
-CREATE INDEX idx_analysis_created_at ON image_analysis_results (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analysis_user_id ON image_analysis_results (user_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_session_id ON image_analysis_results (session_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON image_analysis_results (created_at DESC);
 
 -- =============================================================================
 -- 3. EDIT SUGGESTIONS TABLE
@@ -137,9 +138,9 @@ CREATE TABLE IF NOT EXISTS edit_suggestions (
 );
 
 -- Indexes for edit_suggestions
-CREATE INDEX idx_suggestions_analysis_id ON edit_suggestions (analysis_id);
-CREATE INDEX idx_suggestions_user_id ON edit_suggestions (user_id);
-CREATE INDEX idx_suggestions_expires_at ON edit_suggestions (expires_at);
+CREATE INDEX IF NOT EXISTS idx_suggestions_analysis_id ON edit_suggestions (analysis_id);
+CREATE INDEX IF NOT EXISTS idx_suggestions_user_id ON edit_suggestions (user_id);
+CREATE INDEX IF NOT EXISTS idx_suggestions_expires_at ON edit_suggestions (expires_at);
 
 -- =============================================================================
 -- 4. EDIT HISTORY TABLE
@@ -189,11 +190,11 @@ CREATE TABLE IF NOT EXISTS edit_history (
 );
 
 -- Indexes for edit_history
-CREATE INDEX idx_edit_history_user_id ON edit_history (user_id);
-CREATE INDEX idx_edit_history_template_id ON edit_history (template_id);
-CREATE INDEX idx_edit_history_status ON edit_history (status);
-CREATE INDEX idx_edit_history_created_at ON edit_history (created_at DESC);
-CREATE INDEX idx_edit_history_favorite ON edit_history (is_favorite, user_id) WHERE is_favorite = TRUE;
+CREATE INDEX IF NOT EXISTS idx_edit_history_user_id ON edit_history (user_id);
+CREATE INDEX IF NOT EXISTS idx_edit_history_template_id ON edit_history (template_id);
+CREATE INDEX IF NOT EXISTS idx_edit_history_status ON edit_history (status);
+CREATE INDEX IF NOT EXISTS idx_edit_history_created_at ON edit_history (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_edit_history_favorite ON edit_history (is_favorite, user_id) WHERE is_favorite = TRUE;
 
 -- =============================================================================
 -- 5. USER PREFERENCES TABLE
@@ -271,8 +272,8 @@ CREATE TABLE IF NOT EXISTS template_performance_metrics (
 );
 
 -- Indexes for template_performance_metrics
-CREATE INDEX idx_metrics_template_id ON template_performance_metrics (template_id);
-CREATE INDEX idx_metrics_date ON template_performance_metrics (metric_date DESC);
+CREATE INDEX IF NOT EXISTS idx_metrics_template_id ON template_performance_metrics (template_id);
+CREATE INDEX IF NOT EXISTS idx_metrics_date ON template_performance_metrics (metric_date DESC);
 
 -- =============================================================================
 -- 7. BATCH EDIT JOBS TABLE
@@ -309,8 +310,8 @@ CREATE TABLE IF NOT EXISTS batch_edit_jobs (
 );
 
 -- Indexes for batch_edit_jobs
-CREATE INDEX idx_batch_jobs_user_id ON batch_edit_jobs (user_id);
-CREATE INDEX idx_batch_jobs_status ON batch_edit_jobs (status);
+CREATE INDEX IF NOT EXISTS idx_batch_jobs_user_id ON batch_edit_jobs (user_id);
+CREATE INDEX IF NOT EXISTS idx_batch_jobs_status ON batch_edit_jobs (status);
 
 -- =============================================================================
 -- FUNCTIONS
@@ -326,11 +327,13 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for updated_at
+DROP TRIGGER IF EXISTS update_prompt_templates_updated_at ON prompt_templates;
 CREATE TRIGGER update_prompt_templates_updated_at
     BEFORE UPDATE ON prompt_templates
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_user_edit_preferences_updated_at ON user_edit_preferences;
 CREATE TRIGGER update_user_edit_preferences_updated_at
     BEFORE UPDATE ON user_edit_preferences
     FOR EACH ROW
@@ -372,14 +375,14 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =============================================================================
--- INDEXES FOR PERFORMANCE
+-- INDEXES FOR PERFORMANCE (Additional composite indexes)
 -- =============================================================================
 
 -- Composite indexes for common queries
-CREATE INDEX idx_analysis_user_chat ON image_analysis_results(user_id, chat_id, created_at DESC);
-CREATE INDEX idx_suggestions_user_chat ON edit_suggestions(user_id, chat_id, created_at DESC);
-CREATE INDEX idx_history_user_chat ON edit_history(user_id, chat_id, created_at DESC);
-CREATE INDEX idx_history_template_success ON edit_history(template_id, status) WHERE status = 'completed';
+CREATE INDEX IF NOT EXISTS idx_analysis_user_chat ON image_analysis_results(user_id, chat_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_suggestions_user_chat ON edit_suggestions(user_id, chat_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_history_user_chat ON edit_history(user_id, chat_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_history_template_success ON edit_history(template_id, status) WHERE status = 'completed';
 
 -- =============================================================================
 -- COMMENTS FOR DOCUMENTATION
@@ -408,4 +411,7 @@ BEGIN
     RAISE NOTICE '  - user_edit_preferences';
     RAISE NOTICE '  - template_performance_metrics';
     RAISE NOTICE '  - batch_edit_jobs';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Indexes created for all tables';
+    RAISE NOTICE 'Triggers and functions installed';
 END $$;
