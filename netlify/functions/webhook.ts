@@ -375,7 +375,7 @@ async function generateImageWithImagen(userInput: string, isDobby: boolean = fal
           }
         })
       },
-      8000 // 8-second timeout to fit within Netlify's 10-second limit
+      20000 // 20-second timeout for Render.com (30-second limit)
     );
 
     if (!response.ok) {
@@ -605,7 +605,7 @@ function isDobbyActivated(text: string): { activated: boolean; command: string |
   const content = match[1].trim();
 
   // Check for help commands
-  if (/(사용법|도움말|사용방법|어떻게|메뉴얼|가이드|명령어)/i.test(content)) {
+  if (/(사용법|도움말|사용방법|메뉴얼|가이드|명령어 알려|도움 줘|help)/i.test(content)) {
     return { activated: true, command: 'help', content: content };
   }
 
