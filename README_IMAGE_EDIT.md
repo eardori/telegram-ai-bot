@@ -100,7 +100,7 @@
 
 ### 핵심 서비스
 - **이미지 분석**: Gemini Vision API
-- **이미지 편집**: Nano Banafo API (또는 Gemini)
+- **이미지 편집**: Gemini API (Nano Banafo는 프로젝트명)
 - **데이터베이스**: Supabase (PostgreSQL)
 - **봇 프레임워크**: grammY
 
@@ -108,7 +108,7 @@
 ```
 사용자 → Telegram Bot → Image Analyzer → Template Matcher
                     ↓
-            Nano Banafo API ← Prompt Builder ← Suggestion Engine
+            Gemini API ← Prompt Builder ← Suggestion Engine
 ```
 
 ## 📊 성능 지표
@@ -127,9 +127,8 @@
 
 `.env` 파일에 추가:
 ```bash
-# 필수
-NANO_BANAFO_API_KEY=your_api_key
-NANO_BANAFO_API_URL=https://api.nanobanafo.com/v1
+# 필수 (이미 설정되어 있음)
+GOOGLE_API_KEY=your_google_api_key  # 이미지 분석과 편집 모두 사용
 
 # 선택 (설정 권장)
 MAX_IMAGE_SIZE_MB=20
@@ -170,7 +169,7 @@ git push origin main
 | Template Matcher | `TemplateMatcher` | 템플릿 매칭 |
 | Suggestion Engine | `SuggestionEngine` | 제안 생성 |
 | Prompt Builder | `PromptBuilder` | 프롬프트 구성 |
-| Nano Banafo Client | `NanoBanafoClient` | 편집 실행 |
+| Gemini Edit Client | `NanoBanafoClient` | 편집 실행 (Gemini API 사용) |
 
 ## 🐛 트러블슈팅
 

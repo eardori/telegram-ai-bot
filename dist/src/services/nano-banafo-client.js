@@ -1,19 +1,19 @@
 "use strict";
 /**
- * Nano Banafo API Client
- * Handles image editing requests to Nano Banafo service
+ * Gemini Image Edit Client (formerly Nano Banafo)
+ * Handles image editing requests using Google Gemini API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NanoBanafoClient = void 0;
 const image_edit_types_1 = require("../types/image-edit.types");
 class NanoBanafoClient {
     constructor() {
+        this.model = 'gemini-1.5-pro-latest';
         this.maxRetries = 3;
         this.timeout = 30000; // 30 seconds
-        this.apiKey = process.env.NANO_BANAFO_API_KEY || '';
-        this.apiUrl = process.env.NANO_BANAFO_API_URL || 'https://api.nanobanafo.com/v1';
+        this.apiKey = process.env.GOOGLE_API_KEY || '';
         if (!this.apiKey) {
-            console.warn('Nano Banafo API key not configured. Using mock mode.');
+            console.warn('Google API key not configured. Using mock mode.');
         }
     }
     /**
@@ -101,30 +101,57 @@ class NanoBanafoClient {
      * Call API with retry logic
      */
     async callAPIWithRetry(request, attempt = 1) {
+        const startTime = Date.now();
         try {
             // If no API key, use mock response
             if (!this.apiKey) {
                 return this.getMockResponse(request);
             }
-            // Make API call
+            // Make Gemini API call
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-            const response = await fetch(`${this.apiUrl}/edit`, {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(request),
+                body: JSON.stringify({
+                    contents: [{
+                            parts: [
+                                { text: request.prompt },
+                                request.image ? {
+                                    inline_data: {
+                                        mime_type: 'image/jpeg',
+                                        data: request.image
+                                    }
+                                } : null
+                            ].filter(Boolean)
+                        }],
+                    generationConfig: {
+                        temperature: 0.8,
+                        maxOutputTokens: 8192,
+                        responseMimeType: 'image/jpeg'
+                    }
+                }),
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || `API error: ${response.status}`);
+                throw new Error(errorData.error?.message || `API error: ${response.status}`);
             }
             const data = await response.json();
-            return data;
+            // Extract image from Gemini response
+            const generatedImage = data.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data;
+            if (!generatedImage) {
+                throw new Error('No image generated');
+            }
+            return {
+                success: true,
+                image: generatedImage,
+                processing_time: Date.now() - startTime
+            };
         }
         catch (error) {
             // Check if we should retry
@@ -134,7 +161,7 @@ class NanoBanafoClient {
                     error.message?.includes('502') || // Bad gateway
                     error.message?.includes('503'); // Service unavailable
                 if (shouldRetry) {
-                    console.log(`Retrying Nano Banafo API (attempt ${attempt + 1}/${this.maxRetries})...`);
+                    console.log(`Retrying Gemini API (attempt ${attempt + 1}/${this.maxRetries})...`);
                     // Exponential backoff
                     await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
                     return this.callAPIWithRetry(request, attempt + 1);
@@ -147,7 +174,7 @@ class NanoBanafoClient {
      * Get mock response for testing
      */
     async getMockResponse(request) {
-        console.log('🎨 Mock Nano Banafo API call:', {
+        console.log('🎨 Mock Gemini Image Edit API call:', {
             prompt: request.prompt.substring(0, 100),
             hasImage: !!request.image,
             hasMultipleImages: !!request.images
@@ -198,12 +225,7 @@ class NanoBanafoClient {
             if (!this.apiKey) {
                 return true; // Mock mode is always "healthy"
             }
-            const response = await fetch(`${this.apiUrl}/health`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`
-                }
-            });
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`);
             return response.ok;
         }
         catch {
