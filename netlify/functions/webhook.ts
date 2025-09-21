@@ -344,6 +344,7 @@ bot.use(async (ctx, next) => {
     }
   }
 });
+*/
 
 // Helper function to generate image with Imagen
 async function generateImageWithImagen(userInput: string, isDobby: boolean = false, userId?: string, chatId?: string) {
@@ -597,7 +598,7 @@ function isQuestion(text: string): boolean {
 }
 
 // Helper function to detect Dobby activation
-function isDobbyActivated(text: string): { activated: boolean; command: string | null; content: string } {
+function isDobbyActivated(text: string, isReply: boolean = false): { activated: boolean; command: string | null; content: string } {
   const dobbyPattern = /도비야[,\s]*(.*)/i;
   const match = text.match(dobbyPattern);
 
@@ -606,6 +607,11 @@ function isDobbyActivated(text: string): { activated: boolean; command: string |
   }
 
   const content = match[1].trim();
+
+  // If it's a reply to a photo, default to edit command
+  if (isReply) {
+    return { activated: true, command: 'edit', content: content };
+  }
 
   // Check for help commands
   if (/(사용법|도움말|사용방법|메뉴얼|가이드|명령어 알려|도움 줘|help)/i.test(content)) {
@@ -1033,7 +1039,9 @@ bot.command('maintenance', async (ctx) => {
   }
 });
 
-// Handle photo messages with editing capability
+// Photo handling moved to image-edit-handler.ts for automatic AI suggestions
+// This handler is now disabled to avoid conflicts
+/*
 bot.on('message:photo', async (ctx) => {
   console.log('📸 Photo message received');
 

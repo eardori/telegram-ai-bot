@@ -419,6 +419,7 @@ export interface EditSession {
   sessionId: string;
   userId: number;
   chatId: number;
+  messageId?: number;
   state: 'awaiting_images' | 'analyzing' | 'showing_suggestions' | 'processing' | 'completed';
   images: PhotoMessage[];
   analysis?: ImageAnalysis;

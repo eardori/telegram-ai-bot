@@ -63,15 +63,60 @@ export class SuggestionEngine implements ISuggestionEngine {
     userHistory?: EditResult[]
   ): Promise<PromptTemplate[]> {
     // Calculate composite scores
-    const scoredTemplates = templates.map(template => ({
+    let scoredTemplates = templates.map(template => ({
       template,
       score: this.calculateCompositeScore(template, analysis, userHistory)
     }));
+
+    // Apply special prioritization based on image count
+    scoredTemplates = this.applyImageCountPrioritization(scoredTemplates, analysis);
 
     // Sort by score descending
     scoredTemplates.sort((a, b) => b.score - a.score);
 
     return scoredTemplates.map(item => item.template);
+  }
+
+  /**
+   * Apply prioritization based on image count
+   */
+  private applyImageCountPrioritization(
+    scoredTemplates: Array<{ template: PromptTemplate; score: number }>,
+    analysis: ImageAnalysis
+  ): Array<{ template: PromptTemplate; score: number }> {
+    if (analysis.imageCount === 1) {
+      // Single image priorities
+      const singleImageBoosts: Record<string, number> = {
+        'figurine_commercial': 30,
+        'portrait_styling_redcarpet': 25,
+        'quality_enhance': 20,
+        'vintage_portrait': 15,
+        'black_white_dramatic': 15,
+        'portrait_styling_paris': 10,
+        'yarn_doll': 10
+      };
+
+      return scoredTemplates.map(item => ({
+        ...item,
+        score: item.score + (singleImageBoosts[item.template.templateKey] || 0)
+      }));
+    } else {
+      // Multiple images priorities
+      const multiImageBoosts: Record<string, number> = {
+        'multi_image_composite': 35,
+        'outfit_swap': 30,
+        'background_replace': 25,
+        'album_9_photos': 20,
+        'sticker_photo_9': 20,
+        'polaroid_couple_family': 15,
+        'expression_change': 10
+      };
+
+      return scoredTemplates.map(item => ({
+        ...item,
+        score: item.score + (multiImageBoosts[item.template.templateKey] || 0)
+      }));
+    }
   }
 
   /**

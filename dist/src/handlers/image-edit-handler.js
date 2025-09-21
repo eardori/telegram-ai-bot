@@ -41,16 +41,18 @@ async function handlePhotoUpload(ctx) {
         }
         const userId = ctx.from.id;
         const chatId = ctx.chat?.id || userId;
+        const messageId = ctx.message.message_id;
         const photos = ctx.message.photo;
         const caption = ctx.message.caption || '';
         // Get largest photo
         const largestPhoto = photos[photos.length - 1];
-        // Check for existing session
-        const sessionId = `${userId}_${chatId}`;
+        // Use message_id based session for grouping photos sent together
+        const sessionId = `${userId}_${chatId}_${messageId}`;
         let session = editSessions.get(sessionId);
-        // If no session or session is completed, start new session
-        if (!session || session.state === 'completed') {
+        // Create new session for this message
+        if (!session) {
             session = await createEditSession(userId, chatId);
+            session.messageId = messageId;
             editSessions.set(sessionId, session);
         }
         // Add photo to session
@@ -63,35 +65,24 @@ async function handlePhotoUpload(ctx) {
         };
         session.images.push(photoMessage);
         session.lastActivityAt = new Date();
-        // Check if user wants immediate processing or is collecting multiple images
-        const isMultiImageMode = caption.toLowerCase().includes('더') ||
-            caption.toLowerCase().includes('more') ||
-            caption.toLowerCase().includes('추가');
-        if (isMultiImageMode && session.images.length < 5) {
-            // Wait for more images
-            await ctx.reply(`📸 ${session.images.length}장 받았습니다.\n` +
-                `추가로 업로드하거나 "완료"를 입력하여 분석을 시작하세요.\n` +
-                `(최대 5장까지 가능)`);
-            return;
-        }
-        // Check for direct edit request in caption
-        const hasEditRequest = caption && (caption.includes('편집') ||
-            caption.includes('바꿔') ||
-            caption.includes('변경') ||
-            caption.includes('edit'));
-        if (hasEditRequest || session.images.length === 1) {
-            // Start analysis immediately
-            await startImageAnalysis(ctx, session);
+        // If this is a media group (multiple photos sent together)
+        // Telegram sends them as separate messages with same media_group_id
+        if (ctx.message.media_group_id) {
+            // Store media_group_id for tracking
+            const mediaGroupId = ctx.message.media_group_id;
+            // Wait a bit for other photos in the group
+            setTimeout(async () => {
+                // Check if more photos were added to this session
+                const updatedSession = editSessions.get(sessionId);
+                if (updatedSession && updatedSession.state !== 'analyzing') {
+                    updatedSession.state = 'analyzing';
+                    await startImageAnalysis(ctx, updatedSession);
+                }
+            }, 1000); // Wait 1 second for other photos in the group
         }
         else {
-            // Ask user what to do
-            const keyboard = new grammy_1.InlineKeyboard()
-                .text('🎨 편집 시작', 'start_edit')
-                .text('📸 사진 추가', 'add_more')
-                .row()
-                .text('❌ 취소', 'cancel_edit');
-            await ctx.reply(`📸 ${session.images.length}장의 사진을 받았습니다.\n` +
-                `어떻게 하시겠습니까?`, { reply_markup: keyboard });
+            // Single photo - analyze immediately
+            await startImageAnalysis(ctx, session);
         }
     }
     catch (error) {
@@ -337,7 +328,7 @@ async function handleStartEdit(ctx) {
     await startImageAnalysis(ctx, session);
 }
 /**
- * Handle /edit command
+ * Handle /edit command - now only works with reply
  */
 async function handleEditCommand(ctx) {
     const userId = ctx.from?.id;
@@ -346,17 +337,40 @@ async function handleEditCommand(ctx) {
         await ctx.reply('❌ 사용자 정보를 찾을 수 없습니다.');
         return;
     }
-    // Create new session
-    const session = await createEditSession(userId, chatId);
-    const sessionId = `${userId}_${chatId}`;
-    editSessions.set(sessionId, session);
-    await ctx.reply('📸 **AI 사진 편집**\n\n' +
-        '편집하실 사진을 업로드해주세요.\n' +
-        '최대 5장까지 동시에 편집할 수 있습니다.\n\n' +
-        '💡 **팁**:\n' +
-        '- 사진과 함께 편집 내용을 설명하면 더 정확한 결과를 얻을 수 있습니다\n' +
-        '- 예: "배경을 바꿔주세요" 또는 "빈티지 스타일로"\n' +
-        '- 여러 장을 합성하려면 모든 사진을 업로드 후 "완료"를 입력하세요');
+    // Check if this is a reply to a message with photo
+    if (ctx.message?.reply_to_message?.photo) {
+        const replyMsg = ctx.message.reply_to_message;
+        const photos = replyMsg.photo;
+        const caption = ctx.message.text?.replace('/edit', '').trim() || '';
+        // Create new session for this edit
+        const session = await createEditSession(userId, chatId);
+        const sessionId = `${userId}_${chatId}_edit_${Date.now()}`;
+        editSessions.set(sessionId, session);
+        // Get largest photo
+        const largestPhoto = photos[photos.length - 1];
+        // Add photo to session
+        const photoMessage = {
+            fileId: largestPhoto.file_id,
+            fileSize: largestPhoto.file_size || 0,
+            width: largestPhoto.width || 0,
+            height: largestPhoto.height || 0,
+            caption: caption
+        };
+        session.images.push(photoMessage);
+        session.lastActivityAt = new Date();
+        // Start analysis immediately
+        await startImageAnalysis(ctx, session);
+    }
+    else {
+        // No photo to edit - show instructions
+        await ctx.reply('📸 **AI 사진 편집**\n\n' +
+            '편집하려면 사진에 답장(reply)하면서 /edit 명령어를 사용하세요.\n\n' +
+            '**사용 방법:**\n' +
+            '1. 편집하고 싶은 사진에 답장\n' +
+            '2. /edit 입력\n' +
+            '3. 원하는 편집 스타일 선택\n\n' +
+            '💡 **팁**: 새 사진을 업로드하면 자동으로 편집 제안을 받을 수 있습니다.');
+    }
 }
 /**
  * Handle /cancel command
