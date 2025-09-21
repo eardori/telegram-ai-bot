@@ -63,15 +63,24 @@ async function handlePhotoUpload(ctx: Context) {
     // Get largest photo
     const largestPhoto = photos[photos.length - 1];
 
-    // Use message_id based session for grouping photos sent together
-    const sessionId = `${userId}_${chatId}_${messageId}`;
-    let session = editSessions.get(sessionId);
+    // Use userId_chatId for session management (without messageId to avoid session loss)
+    const sessionId = `${userId}_${chatId}`;
 
-    // Create new session for this message
-    if (!session) {
+    // Check for media group (multiple photos sent together)
+    const mediaGroupId = (ctx.message as any).media_group_id;
+    const groupSessionId = mediaGroupId ? `${userId}_${chatId}_group_${mediaGroupId}` : sessionId;
+
+    let session = editSessions.get(groupSessionId) || editSessions.get(sessionId);
+
+    // Create new session if needed
+    if (!session || session.state === 'completed') {
       session = await createEditSession(userId, chatId);
       session.messageId = messageId;
-      editSessions.set(sessionId, session);
+      const finalSessionId = mediaGroupId ? groupSessionId : sessionId;
+      editSessions.set(finalSessionId, session);
+
+      // Store the session ID in the session for later reference
+      (session as any).sessionId = finalSessionId;
     }
 
     // Add photo to session
@@ -88,21 +97,23 @@ async function handlePhotoUpload(ctx: Context) {
 
     // If this is a media group (multiple photos sent together)
     // Telegram sends them as separate messages with same media_group_id
-    if (ctx.message.media_group_id) {
-      // Store media_group_id for tracking
-      const mediaGroupId = ctx.message.media_group_id;
+    if (mediaGroupId) {
+      console.log(`📸 Media group detected: ${mediaGroupId}, photos: ${session.images.length}`);
 
       // Wait a bit for other photos in the group
       setTimeout(async () => {
         // Check if more photos were added to this session
-        const updatedSession = editSessions.get(sessionId);
+        const currentSessionId = (session as any).sessionId || groupSessionId;
+        const updatedSession = editSessions.get(currentSessionId);
         if (updatedSession && updatedSession.state !== 'analyzing') {
+          console.log(`🔍 Starting analysis for ${updatedSession.images.length} photos`);
           updatedSession.state = 'analyzing';
           await startImageAnalysis(ctx, updatedSession);
         }
-      }, 1000); // Wait 1 second for other photos in the group
+      }, 1500); // Wait 1.5 seconds for other photos in the group
     } else {
       // Single photo - analyze immediately
+      console.log('📸 Single photo detected, analyzing immediately');
       await startImageAnalysis(ctx, session);
     }
   } catch (error) {
@@ -144,11 +155,24 @@ async function startImageAnalysis(ctx: Context, session: EditSession) {
 
     // Generate suggestions
     const userHistory = await getUserHistory(session.userId);
-    const suggestions = await suggestionEngine.generateSuggestions(
-      analysis,
-      userHistory,
-      5
-    );
+
+    let suggestions: EditSuggestion[] = [];
+    try {
+      suggestions = await suggestionEngine.generateSuggestions(
+        analysis,
+        userHistory,
+        5
+      );
+      console.log(`✅ Generated ${suggestions.length} suggestions`);
+    } catch (error) {
+      console.error('❌ Suggestion generation error:', error);
+    }
+
+    // Use default suggestions if none generated
+    if (!suggestions || suggestions.length === 0) {
+      console.log('⚠️ Using default suggestions');
+      suggestions = getDefaultSuggestions(analysis.imageCount);
+    }
 
     session.suggestions = suggestions;
     session.state = 'showing_suggestions';
@@ -175,6 +199,17 @@ async function showSuggestions(
   analysis: ImageAnalysis,
   suggestions: EditSuggestion[]
 ) {
+  console.log(`🎨 Showing ${suggestions?.length || 0} suggestions`);
+
+  if (!suggestions || suggestions.length === 0) {
+    console.error('❌ No suggestions to show!');
+    await ctx.reply('❌ 편집 제안을 생성할 수 없습니다. 다시 시도해주세요.');
+    return;
+  }
+
+  // Store session ID for callback handling
+  const sessionId = (session as any).sessionId || `${session.userId}_${session.chatId}`;
+
   // Build analysis summary
   let summary = '📊 **이미지 분석 결과**\n\n';
 
@@ -203,7 +238,7 @@ async function showSuggestions(
     // Add button for each suggestion
     keyboard.text(
       `${emoji} ${suggestion.displayName} (${confidence}%)`,
-      `edit:${suggestion.templateKey}:${session.sessionId}`
+      `edit:${suggestion.templateKey}:${sessionId}`
     );
 
     if (index < suggestions.length - 1) {
@@ -221,8 +256,8 @@ async function showSuggestions(
 
   // Add custom edit option
   keyboard.row();
-  keyboard.text('✏️ 커스텀 편집', `custom:${session.sessionId}`);
-  keyboard.text('❌ 취소', `cancel:${session.sessionId}`);
+  keyboard.text('✏️ 커스텀 편집', `custom:${sessionId}`);
+  keyboard.text('❌ 취소', `cancel:${sessionId}`);
 
   await ctx.reply(summary, {
     parse_mode: 'Markdown',
@@ -290,7 +325,21 @@ async function handleCallbackQuery(ctx: Context) {
  */
 async function handleEditSelection(ctx: Context, templateKey: string, sessionId: string) {
   try {
-    const session = editSessions.get(sessionId);
+    console.log(`🎯 Handling edit selection: ${templateKey}, session: ${sessionId}`);
+
+    // Try to find session with different possible IDs
+    let session = editSessions.get(sessionId);
+
+    if (!session) {
+      // Try without group suffix
+      const userId = ctx.from?.id;
+      const chatId = ctx.chat?.id;
+      if (userId && chatId) {
+        const alternateId = `${userId}_${chatId}`;
+        session = editSessions.get(alternateId);
+        console.log(`🔍 Trying alternate session ID: ${alternateId}`);
+      }
+    }
     if (!session) {
       await ctx.answerCallbackQuery('❌ 세션이 만료되었습니다. 다시 시작해주세요.');
       return;
@@ -611,6 +660,129 @@ async function saveEditResult(
   } catch (error) {
     console.error('Error saving edit result:', error);
   }
+}
+
+/**
+ * Get default suggestions when generation fails
+ */
+function getDefaultSuggestions(imageCount: number): EditSuggestion[] {
+  const singleImageSuggestions: EditSuggestion[] = [
+    {
+      templateId: 1,
+      templateKey: 'figurine_commercial',
+      displayName: '🎭 피규어 만들기',
+      description: '사진을 고품질 피규어 스타일로 변환합니다',
+      confidence: 0.9,
+      priority: 95,
+      requiredImages: 1,
+      estimatedTime: 15,
+      estimatedCost: 0.002
+    },
+    {
+      templateId: 2,
+      templateKey: 'portrait_styling_redcarpet',
+      displayName: '✨ 레드카펫 스타일',
+      description: '고급스러운 레드카펫 스타일로 변환합니다',
+      confidence: 0.85,
+      priority: 90,
+      requiredImages: 1,
+      estimatedTime: 12,
+      estimatedCost: 0.002
+    },
+    {
+      templateId: 3,
+      templateKey: 'quality_enhance',
+      displayName: '🔧 화질 개선',
+      description: '이미지 화질을 향상시킵니다',
+      confidence: 0.8,
+      priority: 85,
+      requiredImages: 1,
+      estimatedTime: 10,
+      estimatedCost: 0.001
+    },
+    {
+      templateId: 4,
+      templateKey: 'vintage_portrait',
+      displayName: '📷 빈티지 스타일',
+      description: '클래식한 빈티지 분위기로 변환합니다',
+      confidence: 0.75,
+      priority: 80,
+      requiredImages: 1,
+      estimatedTime: 10,
+      estimatedCost: 0.001
+    },
+    {
+      templateId: 5,
+      templateKey: 'black_white_dramatic',
+      displayName: '⚫ 드라마틱 흑백',
+      description: '감각적인 흑백 사진으로 변환합니다',
+      confidence: 0.7,
+      priority: 75,
+      requiredImages: 1,
+      estimatedTime: 8,
+      estimatedCost: 0.001
+    }
+  ];
+
+  const multiImageSuggestions: EditSuggestion[] = [
+    {
+      templateId: 11,
+      templateKey: 'multi_image_composite',
+      displayName: '🎨 이미지 합성',
+      description: '여러 이미지를 하나로 합성합니다',
+      confidence: 0.9,
+      priority: 95,
+      requiredImages: 2,
+      estimatedTime: 20,
+      estimatedCost: 0.003
+    },
+    {
+      templateId: 12,
+      templateKey: 'outfit_swap',
+      displayName: '👔 의상 교체',
+      description: '이미지 간 의상을 교체합니다',
+      confidence: 0.85,
+      priority: 90,
+      requiredImages: 2,
+      estimatedTime: 18,
+      estimatedCost: 0.003
+    },
+    {
+      templateId: 13,
+      templateKey: 'background_replace',
+      displayName: '🏞️ 배경 통일',
+      description: '모든 이미지의 배경을 통일합니다',
+      confidence: 0.8,
+      priority: 85,
+      requiredImages: 2,
+      estimatedTime: 15,
+      estimatedCost: 0.002
+    },
+    {
+      templateId: 14,
+      templateKey: 'album_9_photos',
+      displayName: '📸 9장 앨범',
+      description: '9장의 앨범 형태로 만듭니다',
+      confidence: 0.75,
+      priority: 80,
+      requiredImages: 9,
+      estimatedTime: 12,
+      estimatedCost: 0.002
+    },
+    {
+      templateId: 15,
+      templateKey: 'sticker_photo_9',
+      displayName: '🎯 스티커 사진',
+      description: '스티커 사진 형태로 만듭니다',
+      confidence: 0.7,
+      priority: 75,
+      requiredImages: 4,
+      estimatedTime: 10,
+      estimatedCost: 0.002
+    }
+  ];
+
+  return imageCount === 1 ? singleImageSuggestions : multiImageSuggestions;
 }
 
 /**
