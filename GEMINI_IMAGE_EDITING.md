@@ -1,7 +1,7 @@
 # Gemini Image Editing API 핵심 정보
 
 ## ✅ Gemini는 직접 이미지 편집 가능
-- **모델명**: `gemini-2.5-flash-image-preview`
+- **모델명**: `gemini-2.5-flash-image-preview` (이 모델만 이미지 생성 지원)
 - 입력 이미지를 실제로 편집해서 새 이미지 반환
 - 텍스트 설명이 아닌 실제 편집된 이미지 출력
 

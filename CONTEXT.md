@@ -27,7 +27,7 @@
 
 **⚠️ IMPORTANT: Google Gemini CAN edit and generate images!**
 
-- **모델명**: `gemini-2.0-flash-exp` (이미지 생성/편집 지원)
+- **모델명**: `gemini-2.5-flash-image-preview` (이미지 생성/편집 전용 모델)
 - **환경변수**: `GOOGLE_API_KEY` (별도 API 키 불필요)
 - **기능**:
   - 이미지 편집 (img2img)

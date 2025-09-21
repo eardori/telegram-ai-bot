@@ -4,7 +4,7 @@
  * Handles image editing requests using Google Gemini API
  *
  * IMPORTANT: Google Gemini CAN edit and generate images!
- * Model: gemini-2.0-flash-exp
+ * Model: gemini-2.5-flash-image-preview (ONLY this model supports image generation)
  * Docs: https://ai.google.dev/gemini-api/docs/image-generation
  * Uses GOOGLE_API_KEY environment variable
  */
@@ -14,8 +14,9 @@ const image_edit_types_1 = require("../types/image-edit.types");
 class NanoBanafoClient {
     constructor() {
         // IMPORTANT: Use image generation capable model
-        // gemini-2.0-flash-exp supports image generation/editing
-        this.model = 'gemini-2.0-flash-exp';
+        // gemini-2.5-flash-image-preview is the ONLY model that supports image generation
+        // Docs: https://ai.google.dev/gemini-api/docs/image-generation
+        this.model = 'gemini-2.5-flash-image-preview';
         this.maxRetries = 3;
         this.timeout = 30000; // 30 seconds
         this.apiKey = process.env.GOOGLE_API_KEY || '';
