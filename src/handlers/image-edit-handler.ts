@@ -365,7 +365,7 @@ async function handleCallbackQuery(ctx: Context) {
  */
 async function handleEditSelection(ctx: Context, templateKey: string, sessionId: string) {
   try {
-    console.log(`🎯 Handling edit selection: ${sessionId}, template: ${templateKey}`);
+    console.log(`🎯 Handling edit selection: sessionId=${sessionId}, templateKey=${templateKey}`);
 
     // Try to find session with different possible IDs
     let session = editSessions.get(sessionId);
@@ -485,6 +485,8 @@ async function handleEditSelection(ctx: Context, templateKey: string, sessionId:
  * Handle edit selection by template ID
  */
 async function handleEditSelectionById(ctx: Context, sessionId: string, templateId: number) {
+  console.log(`🎨 handleEditSelectionById called: templateId=${templateId}, sessionId=${sessionId}`);
+
   let session = editSessions.get(sessionId);
 
   // Try to find session with different variations
@@ -507,50 +509,126 @@ async function handleEditSelectionById(ctx: Context, sessionId: string, template
     return;
   }
 
-  // Find template by ID from database
-  const { data: templates, error } = await supabase
-    .from('prompt_templates')
-    .select('*')
-    .eq('id', templateId)
-    .single();
+  // For default templates (11-15), use hardcoded values
+  let template: PromptTemplate | null = null;
 
-  if (error || !templates) {
-    await ctx.answerCallbackQuery('❌ 템플릿을 찾을 수 없습니다.');
-    return;
+  // Check if it's a default multi-image template
+  if (templateId >= 11 && templateId <= 15) {
+    const defaultTemplates: Record<number, Partial<PromptTemplate>> = {
+      11: {
+        id: 11,
+        templateKey: 'multi_image_composite',
+        templateNameKo: '🎨 이미지 합성',
+        templateNameEn: 'Multi Image Composite',
+        category: 'multi_image' as any,
+        basePrompt: 'Merge these images into a creative composite',
+        description: '여러 이미지를 하나로 합성합니다',
+        priority: 95,
+        isActive: true
+      },
+      12: {
+        id: 12,
+        templateKey: 'outfit_swap',
+        templateNameKo: '👔 의상 교체',
+        templateNameEn: 'Outfit Swap',
+        category: 'multi_image' as any,
+        basePrompt: 'Swap outfits between the people in these images',
+        description: '이미지 간 의상을 교체합니다',
+        priority: 90,
+        isActive: true
+      },
+      13: {
+        id: 13,
+        templateKey: 'background_replace_multi',
+        templateNameKo: '🏞️ 배경 통일',
+        templateNameEn: 'Background Replace Multi',
+        category: 'multi_image' as any,
+        basePrompt: 'Replace all backgrounds to match the same scene',
+        description: '모든 이미지의 배경을 통일합니다',
+        priority: 85,
+        isActive: true
+      },
+      14: {
+        id: 14,
+        templateKey: 'album_9_photos',
+        templateNameKo: '📸 9장 앨범',
+        templateNameEn: '9 Photo Album',
+        category: 'multi_image' as any,
+        basePrompt: 'Create a 9-photo album layout',
+        description: '9장의 앨범 형태로 만듭니다',
+        priority: 80,
+        isActive: true
+      },
+      15: {
+        id: 15,
+        templateKey: 'sticker_photo_9',
+        templateNameKo: '🎯 스티커 사진',
+        templateNameEn: 'Sticker Photo',
+        category: 'multi_image' as any,
+        basePrompt: 'Create sticker-style photos',
+        description: '스티커 사진 형태로 만듭니다',
+        priority: 75,
+        isActive: true
+      }
+    };
+
+    const defaultTemplate = defaultTemplates[templateId];
+    if (defaultTemplate) {
+      template = {
+        ...defaultTemplate,
+        promptVariables: [],
+        requirements: { minImages: 2 } as any,
+        usageCount: 0,
+        successCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as PromptTemplate;
+    }
+  } else {
+    // Find template by ID from database
+    const { data: templates, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('id', templateId)
+      .single();
+
+    if (!error && templates) {
+      // Map database template to PromptTemplate type
+      template = {
+        id: templates.id,
+        templateKey: templates.template_key,
+        templateNameKo: templates.template_name_ko,
+        templateNameEn: templates.template_name_en,
+        category: templates.category,
+        subcategory: templates.subcategory,
+        basePrompt: templates.base_prompt,
+        examplePrompt: templates.example_prompt,
+        negativePrompt: templates.negative_prompt,
+        description: templates.description,
+        promptVariables: templates.prompt_variables || [],
+        requirements: templates.requirements || {},
+        priority: templates.priority || 50,
+        usageCount: templates.usage_count || 0,
+        successCount: templates.success_count || 0,
+        successRate: templates.success_rate,
+        averageProcessingTimeMs: templates.average_processing_time_ms,
+        estimatedCost: templates.estimated_cost,
+        isActive: templates.is_active,
+        createdAt: new Date(templates.created_at),
+        updatedAt: new Date(templates.updated_at)
+      };
+    }
   }
 
-  // Map database template to PromptTemplate type
-  const template: PromptTemplate = {
-    id: templates.id,
-    templateKey: templates.template_key,
-    templateNameKo: templates.template_name_ko,
-    templateNameEn: templates.template_name_en,
-    category: templates.category,
-    subcategory: templates.subcategory,
-    basePrompt: templates.base_prompt,
-    examplePrompt: templates.example_prompt,
-    negativePrompt: templates.negative_prompt,
-    description: templates.description,
-    promptVariables: templates.prompt_variables || [],
-    requirements: templates.requirements || {},
-    priority: templates.priority || 50,
-    usageCount: templates.usage_count || 0,
-    successCount: templates.success_count || 0,
-    successRate: templates.success_rate,
-    averageProcessingTimeMs: templates.average_processing_time_ms,
-    estimatedCost: templates.estimated_cost,
-    isActive: templates.is_active,
-    createdAt: new Date(templates.created_at),
-    updatedAt: new Date(templates.updated_at)
-  };
-
   if (!template) {
+    console.error(`❌ Template not found for ID: ${templateId}`);
     await ctx.answerCallbackQuery('❌ 템플릿을 찾을 수 없습니다.');
     return;
   }
 
   // Use existing handleEditSelection logic
-  await handleEditSelection(ctx, sessionId, template.templateKey);
+  console.log(`✅ Using template: ${template.templateNameKo} (${template.templateKey})`);
+  await handleEditSelection(ctx, template.templateKey, sessionId);
 }
 
 /**

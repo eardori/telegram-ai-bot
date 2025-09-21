@@ -287,7 +287,7 @@ async function handleCallbackQuery(ctx) {
  */
 async function handleEditSelection(ctx, templateKey, sessionId) {
     try {
-        console.log(`🎯 Handling edit selection: ${sessionId}, template: ${templateKey}`);
+        console.log(`🎯 Handling edit selection: sessionId=${sessionId}, templateKey=${templateKey}`);
         // Try to find session with different possible IDs
         let session = editSessions.get(sessionId);
         if (!session) {
@@ -375,6 +375,7 @@ async function handleEditSelection(ctx, templateKey, sessionId) {
  * Handle edit selection by template ID
  */
 async function handleEditSelectionById(ctx, sessionId, templateId) {
+    console.log(`🎨 handleEditSelectionById called: templateId=${templateId}, sessionId=${sessionId}`);
     let session = editSessions.get(sessionId);
     // Try to find session with different variations
     if (!session) {
@@ -394,46 +395,122 @@ async function handleEditSelectionById(ctx, sessionId, templateId) {
         await ctx.answerCallbackQuery('❌ 세션이 만료되었습니다. 사진을 다시 업로드해주세요.');
         return;
     }
-    // Find template by ID from database
-    const { data: templates, error } = await supabase_1.supabase
-        .from('prompt_templates')
-        .select('*')
-        .eq('id', templateId)
-        .single();
-    if (error || !templates) {
-        await ctx.answerCallbackQuery('❌ 템플릿을 찾을 수 없습니다.');
-        return;
+    // For default templates (11-15), use hardcoded values
+    let template = null;
+    // Check if it's a default multi-image template
+    if (templateId >= 11 && templateId <= 15) {
+        const defaultTemplates = {
+            11: {
+                id: 11,
+                templateKey: 'multi_image_composite',
+                templateNameKo: '🎨 이미지 합성',
+                templateNameEn: 'Multi Image Composite',
+                category: 'multi_image',
+                basePrompt: 'Merge these images into a creative composite',
+                description: '여러 이미지를 하나로 합성합니다',
+                priority: 95,
+                isActive: true
+            },
+            12: {
+                id: 12,
+                templateKey: 'outfit_swap',
+                templateNameKo: '👔 의상 교체',
+                templateNameEn: 'Outfit Swap',
+                category: 'multi_image',
+                basePrompt: 'Swap outfits between the people in these images',
+                description: '이미지 간 의상을 교체합니다',
+                priority: 90,
+                isActive: true
+            },
+            13: {
+                id: 13,
+                templateKey: 'background_replace_multi',
+                templateNameKo: '🏞️ 배경 통일',
+                templateNameEn: 'Background Replace Multi',
+                category: 'multi_image',
+                basePrompt: 'Replace all backgrounds to match the same scene',
+                description: '모든 이미지의 배경을 통일합니다',
+                priority: 85,
+                isActive: true
+            },
+            14: {
+                id: 14,
+                templateKey: 'album_9_photos',
+                templateNameKo: '📸 9장 앨범',
+                templateNameEn: '9 Photo Album',
+                category: 'multi_image',
+                basePrompt: 'Create a 9-photo album layout',
+                description: '9장의 앨범 형태로 만듭니다',
+                priority: 80,
+                isActive: true
+            },
+            15: {
+                id: 15,
+                templateKey: 'sticker_photo_9',
+                templateNameKo: '🎯 스티커 사진',
+                templateNameEn: 'Sticker Photo',
+                category: 'multi_image',
+                basePrompt: 'Create sticker-style photos',
+                description: '스티커 사진 형태로 만듭니다',
+                priority: 75,
+                isActive: true
+            }
+        };
+        const defaultTemplate = defaultTemplates[templateId];
+        if (defaultTemplate) {
+            template = {
+                ...defaultTemplate,
+                promptVariables: [],
+                requirements: { minImages: 2 },
+                usageCount: 0,
+                successCount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
+        }
     }
-    // Map database template to PromptTemplate type
-    const template = {
-        id: templates.id,
-        templateKey: templates.template_key,
-        templateNameKo: templates.template_name_ko,
-        templateNameEn: templates.template_name_en,
-        category: templates.category,
-        subcategory: templates.subcategory,
-        basePrompt: templates.base_prompt,
-        examplePrompt: templates.example_prompt,
-        negativePrompt: templates.negative_prompt,
-        description: templates.description,
-        promptVariables: templates.prompt_variables || [],
-        requirements: templates.requirements || {},
-        priority: templates.priority || 50,
-        usageCount: templates.usage_count || 0,
-        successCount: templates.success_count || 0,
-        successRate: templates.success_rate,
-        averageProcessingTimeMs: templates.average_processing_time_ms,
-        estimatedCost: templates.estimated_cost,
-        isActive: templates.is_active,
-        createdAt: new Date(templates.created_at),
-        updatedAt: new Date(templates.updated_at)
-    };
+    else {
+        // Find template by ID from database
+        const { data: templates, error } = await supabase_1.supabase
+            .from('prompt_templates')
+            .select('*')
+            .eq('id', templateId)
+            .single();
+        if (!error && templates) {
+            // Map database template to PromptTemplate type
+            template = {
+                id: templates.id,
+                templateKey: templates.template_key,
+                templateNameKo: templates.template_name_ko,
+                templateNameEn: templates.template_name_en,
+                category: templates.category,
+                subcategory: templates.subcategory,
+                basePrompt: templates.base_prompt,
+                examplePrompt: templates.example_prompt,
+                negativePrompt: templates.negative_prompt,
+                description: templates.description,
+                promptVariables: templates.prompt_variables || [],
+                requirements: templates.requirements || {},
+                priority: templates.priority || 50,
+                usageCount: templates.usage_count || 0,
+                successCount: templates.success_count || 0,
+                successRate: templates.success_rate,
+                averageProcessingTimeMs: templates.average_processing_time_ms,
+                estimatedCost: templates.estimated_cost,
+                isActive: templates.is_active,
+                createdAt: new Date(templates.created_at),
+                updatedAt: new Date(templates.updated_at)
+            };
+        }
+    }
     if (!template) {
+        console.error(`❌ Template not found for ID: ${templateId}`);
         await ctx.answerCallbackQuery('❌ 템플릿을 찾을 수 없습니다.');
         return;
     }
     // Use existing handleEditSelection logic
-    await handleEditSelection(ctx, sessionId, template.templateKey);
+    console.log(`✅ Using template: ${template.templateNameKo} (${template.templateKey})`);
+    await handleEditSelection(ctx, template.templateKey, sessionId);
 }
 /**
  * Handle custom edit
