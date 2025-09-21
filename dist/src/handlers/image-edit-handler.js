@@ -10,6 +10,7 @@ const image_analyzer_1 = require("../services/image-analyzer");
 const suggestion_engine_1 = require("../services/suggestion-engine");
 const prompt_builder_1 = require("../services/prompt-builder");
 const template_matcher_1 = require("../services/template-matcher");
+const nano_banafo_client_1 = require("../services/nano-banafo-client");
 const supabase_1 = require("../utils/supabase");
 // Session storage (in production, use Redis or database)
 const editSessions = new Map();
@@ -287,19 +288,43 @@ async function handleEditSelection(ctx, templateKey, sessionId) {
         const prompt = promptBuilder.build(template);
         // Download images if not already done
         const imageBuffers = await downloadImages(ctx, session.images);
-        // TODO: Call Nano Banafo API here
-        // For now, simulate processing
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        // Simulate result
-        const resultUrl = 'https://example.com/edited-image.jpg';
-        // Save to database
-        await saveEditResult(session, template, prompt, resultUrl);
-        // Send result
-        await ctx.editMessageText(`✅ **편집 완료!**\n\n` +
-            `🎨 사용된 템플릿: ${template.templateNameKo}\n` +
-            `⏱️ 처리 시간: 15초\n` +
-            `💰 예상 비용: $0.002\n\n` +
-            `[편집된 이미지 보기](${resultUrl})`);
+        const processStartTime = Date.now();
+        // IMPORTANT: Call Gemini Image Edit API (Nano Banafo)
+        // Google Gemini CAN edit images with gemini-2.0-flash-exp model
+        try {
+            const nanoBanafoClient = new nano_banafo_client_1.NanoBanafoClient();
+            // Call the image editing API
+            const editedImageBuffer = await nanoBanafoClient.editImage(imageBuffers[0], prompt, template.negativePrompt);
+            // Send edited image to Telegram
+            const sentMessage = await ctx.replyWithPhoto(new grammy_1.InputFile(editedImageBuffer), {
+                caption: `✅ **편집 완료!**\n\n` +
+                    `🎨 사용된 템플릿: ${template.templateNameKo}\n` +
+                    `⏱️ 처리 시간: ${Math.round((Date.now() - processStartTime) / 1000)}초\n` +
+                    `💰 예상 비용: $${template.estimatedCost || 0.002}\n\n` +
+                    `📝 ${template.description}`
+            });
+            // Get the file ID for the edited image
+            const photos = sentMessage.photo;
+            const fileId = photos[photos.length - 1].file_id;
+            const resultUrl = `tg://photo/${fileId}`;
+            // Save to database
+            await saveEditResult(session, template, prompt, resultUrl);
+            // Update the processing message
+            await ctx.editMessageText(`✅ **편집 완료!**\n\n` +
+                `🎨 사용된 템플릿: ${template.templateNameKo}\n` +
+                `⏱️ 처리 시간: ${Math.round((Date.now() - processStartTime) / 1000)}초\n` +
+                `💰 예상 비용: $${template.estimatedCost || 0.002}\n\n` +
+                `편집된 이미지가 위에 전송되었습니다. ⬆️`);
+        }
+        catch (error) {
+            console.error('Image editing failed:', error);
+            // Fallback to mock mode if API fails
+            await ctx.editMessageText(`⚠️ **편집 처리 중 문제가 발생했습니다**\n\n` +
+                `현재 이미지 편집 서비스가 일시적으로 사용 불가능합니다.\n` +
+                `잠시 후 다시 시도해주세요.\n\n` +
+                `오류: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            return;
+        }
         // Mark session as completed
         session.state = 'completed';
         // Ask for feedback

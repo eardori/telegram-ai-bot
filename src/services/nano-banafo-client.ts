@@ -1,6 +1,11 @@
 /**
  * Gemini Image Edit Client (formerly Nano Banafo)
  * Handles image editing requests using Google Gemini API
+ *
+ * IMPORTANT: Google Gemini CAN edit and generate images!
+ * Model: gemini-2.0-flash-exp
+ * Docs: https://ai.google.dev/gemini-api/docs/image-generation
+ * Uses GOOGLE_API_KEY environment variable
  */
 
 import {
@@ -30,7 +35,9 @@ interface NanoBanafoResponse {
 
 export class NanoBanafoClient {
   private apiKey: string;
-  private model: string = 'gemini-1.5-pro-latest';
+  // IMPORTANT: Use image generation capable model
+  // gemini-2.0-flash-exp supports image generation/editing
+  private model: string = 'gemini-2.0-flash-exp';
   private maxRetries: number = 3;
   private timeout: number = 30000; // 30 seconds
 
@@ -170,6 +177,11 @@ export class NanoBanafoClient {
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
 
+      // Build edit prompt that explicitly requests image generation
+      const editPrompt = request.image
+        ? `Generate an edited version of this image with the following changes: ${request.prompt}\nReturn the edited image, not a text description.`
+        : `Generate an image based on this description: ${request.prompt}`;
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -178,7 +190,7 @@ export class NanoBanafoClient {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: request.prompt },
+              { text: editPrompt },
               request.image ? {
                 inline_data: {
                   mime_type: 'image/jpeg',
@@ -188,9 +200,8 @@ export class NanoBanafoClient {
             ].filter(Boolean)
           }],
           generationConfig: {
-            temperature: 0.8,
-            maxOutputTokens: 8192,
-            responseMimeType: 'image/jpeg'
+            temperature: 0.4, // Lower temperature for more consistent edits
+            maxOutputTokens: 8192
           }
         }),
         signal: controller.signal
@@ -206,7 +217,10 @@ export class NanoBanafoClient {
       const data = await response.json() as any;
 
       // Extract image from Gemini response
-      const generatedImage = data.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data;
+      // Gemini returns image in inline_data or inlineData field
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find((part: any) => part.inline_data || part.inlineData);
+      const generatedImage = imagePart?.inline_data?.data || imagePart?.inlineData?.data;
 
       if (!generatedImage) {
         throw new Error('No image generated');
@@ -254,8 +268,9 @@ export class NanoBanafoClient {
     // Simulate processing delay
     return new Promise<NanoBanafoResponse>(resolve => {
       setTimeout(() => {
-        // Return a mock edited image (1x1 transparent PNG)
-        const mockImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+        // Return a better mock image for testing (red square)
+        // This is a 100x100 red square PNG in base64
+        const mockImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC';
 
         resolve({
           success: true,

@@ -23,6 +23,29 @@
 - **데이터베이스**: Supabase (PostgreSQL)
 - **AI 모델**: Claude 3.5 Sonnet, Google Imagen 4.0
 
+## 🎨 이미지 편집 API - Google Gemini (중요!)
+
+**⚠️ IMPORTANT: Google Gemini CAN edit and generate images!**
+
+- **모델명**: `gemini-2.0-flash-exp` (이미지 생성/편집 지원)
+- **환경변수**: `GOOGLE_API_KEY` (별도 API 키 불필요)
+- **기능**:
+  - 이미지 편집 (img2img)
+  - 이미지 생성 (text2img)
+  - 스타일 변환
+  - 멀티 이미지 합성
+- **문서**: https://ai.google.dev/gemini-api/docs/image-generation
+- **참고 파일**:
+  - `GEMINI_IMAGE_EDITING.md` - 상세 구현 가이드
+  - `src/services/nano-banafo-client.ts` - 구현 코드
+
+**프롬프트 예시**:
+```javascript
+// 이미지 편집 요청
+"Generate an edited version of this image with the following changes: [변경사항]
+Return the edited image, not a text description."
+```
+
 ## 🌐 배포 정보
 - **Production URL**: https://tg-aibot.netlify.app
 - **Webhook URL**: https://tg-aibot.netlify.app/.netlify/functions/webhook

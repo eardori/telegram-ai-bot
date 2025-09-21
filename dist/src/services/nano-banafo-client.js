@@ -2,13 +2,20 @@
 /**
  * Gemini Image Edit Client (formerly Nano Banafo)
  * Handles image editing requests using Google Gemini API
+ *
+ * IMPORTANT: Google Gemini CAN edit and generate images!
+ * Model: gemini-2.0-flash-exp
+ * Docs: https://ai.google.dev/gemini-api/docs/image-generation
+ * Uses GOOGLE_API_KEY environment variable
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NanoBanafoClient = void 0;
 const image_edit_types_1 = require("../types/image-edit.types");
 class NanoBanafoClient {
     constructor() {
-        this.model = 'gemini-1.5-pro-latest';
+        // IMPORTANT: Use image generation capable model
+        // gemini-2.0-flash-exp supports image generation/editing
+        this.model = 'gemini-2.0-flash-exp';
         this.maxRetries = 3;
         this.timeout = 30000; // 30 seconds
         this.apiKey = process.env.GOOGLE_API_KEY || '';
@@ -111,6 +118,10 @@ class NanoBanafoClient {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.timeout);
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+            // Build edit prompt that explicitly requests image generation
+            const editPrompt = request.image
+                ? `Generate an edited version of this image with the following changes: ${request.prompt}\nReturn the edited image, not a text description.`
+                : `Generate an image based on this description: ${request.prompt}`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -119,7 +130,7 @@ class NanoBanafoClient {
                 body: JSON.stringify({
                     contents: [{
                             parts: [
-                                { text: request.prompt },
+                                { text: editPrompt },
                                 request.image ? {
                                     inline_data: {
                                         mime_type: 'image/jpeg',
@@ -129,9 +140,8 @@ class NanoBanafoClient {
                             ].filter(Boolean)
                         }],
                     generationConfig: {
-                        temperature: 0.8,
-                        maxOutputTokens: 8192,
-                        responseMimeType: 'image/jpeg'
+                        temperature: 0.4, // Lower temperature for more consistent edits
+                        maxOutputTokens: 8192
                     }
                 }),
                 signal: controller.signal
@@ -143,7 +153,10 @@ class NanoBanafoClient {
             }
             const data = await response.json();
             // Extract image from Gemini response
-            const generatedImage = data.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data;
+            // Gemini returns image in inline_data or inlineData field
+            const parts = data.candidates?.[0]?.content?.parts || [];
+            const imagePart = parts.find((part) => part.inline_data || part.inlineData);
+            const generatedImage = imagePart?.inline_data?.data || imagePart?.inlineData?.data;
             if (!generatedImage) {
                 throw new Error('No image generated');
             }
@@ -182,8 +195,9 @@ class NanoBanafoClient {
         // Simulate processing delay
         return new Promise(resolve => {
             setTimeout(() => {
-                // Return a mock edited image (1x1 transparent PNG)
-                const mockImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+                // Return a better mock image for testing (red square)
+                // This is a 100x100 red square PNG in base64
+                const mockImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC';
                 resolve({
                     success: true,
                     image: mockImageBase64,

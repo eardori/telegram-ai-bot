@@ -67,6 +67,8 @@ export interface PromptTemplate {
   subcategory?: string;
   basePrompt: string;
   examplePrompt?: string;
+  negativePrompt?: string;
+  description?: string;
   promptVariables: PromptVariable[];
   requirements: TemplateRequirements;
   priority: number;
@@ -74,6 +76,7 @@ export interface PromptTemplate {
   successCount: number;
   successRate?: number;
   averageProcessingTimeMs?: number;
+  estimatedCost?: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
