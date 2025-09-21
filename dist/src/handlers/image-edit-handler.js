@@ -395,113 +395,38 @@ async function handleEditSelectionById(ctx, sessionId, templateId) {
         await ctx.answerCallbackQuery('❌ 세션이 만료되었습니다. 사진을 다시 업로드해주세요.');
         return;
     }
-    // For default templates (11-15), use hardcoded values
+    // Always fetch template from database
     let template = null;
-    // Check if it's a default multi-image template
-    if (templateId >= 11 && templateId <= 15) {
-        const defaultTemplates = {
-            11: {
-                id: 11,
-                templateKey: 'multi_image_composite',
-                templateNameKo: '🎨 이미지 합성',
-                templateNameEn: 'Multi Image Composite',
-                category: 'multi_image',
-                basePrompt: 'Merge these images into a creative composite',
-                description: '여러 이미지를 하나로 합성합니다',
-                priority: 95,
-                isActive: true
-            },
-            12: {
-                id: 12,
-                templateKey: 'outfit_swap',
-                templateNameKo: '👔 의상 교체',
-                templateNameEn: 'Outfit Swap',
-                category: 'multi_image',
-                basePrompt: 'Swap outfits between the people in these images',
-                description: '이미지 간 의상을 교체합니다',
-                priority: 90,
-                isActive: true
-            },
-            13: {
-                id: 13,
-                templateKey: 'background_replace_multi',
-                templateNameKo: '🏞️ 배경 통일',
-                templateNameEn: 'Background Replace Multi',
-                category: 'multi_image',
-                basePrompt: 'Replace all backgrounds to match the same scene',
-                description: '모든 이미지의 배경을 통일합니다',
-                priority: 85,
-                isActive: true
-            },
-            14: {
-                id: 14,
-                templateKey: 'album_9_photos',
-                templateNameKo: '📸 9장 앨범',
-                templateNameEn: '9 Photo Album',
-                category: 'multi_image',
-                basePrompt: 'Create a 9-photo album layout',
-                description: '9장의 앨범 형태로 만듭니다',
-                priority: 80,
-                isActive: true
-            },
-            15: {
-                id: 15,
-                templateKey: 'sticker_photo_9',
-                templateNameKo: '🎯 스티커 사진',
-                templateNameEn: 'Sticker Photo',
-                category: 'multi_image',
-                basePrompt: 'Create sticker-style photos',
-                description: '스티커 사진 형태로 만듭니다',
-                priority: 75,
-                isActive: true
-            }
+    // Find template by ID from database
+    const { data: templates, error } = await supabase_1.supabase
+        .from('prompt_templates')
+        .select('*')
+        .eq('id', templateId)
+        .single();
+    if (!error && templates) {
+        template = {
+            id: templates.id,
+            templateKey: templates.template_key,
+            templateNameKo: templates.template_name_ko,
+            templateNameEn: templates.template_name_en,
+            category: templates.category,
+            subcategory: templates.subcategory,
+            basePrompt: templates.base_prompt,
+            examplePrompt: templates.example_prompt,
+            negativePrompt: templates.negative_prompt,
+            description: templates.description,
+            promptVariables: templates.prompt_variables || [],
+            requirements: templates.requirements || {},
+            priority: templates.priority || 50,
+            usageCount: templates.usage_count || 0,
+            successCount: templates.success_count || 0,
+            successRate: templates.success_rate,
+            averageProcessingTimeMs: templates.average_processing_time_ms,
+            estimatedCost: templates.estimated_cost,
+            isActive: templates.is_active,
+            createdAt: new Date(templates.created_at),
+            updatedAt: new Date(templates.updated_at)
         };
-        const defaultTemplate = defaultTemplates[templateId];
-        if (defaultTemplate) {
-            template = {
-                ...defaultTemplate,
-                promptVariables: [],
-                requirements: { minImages: 2 },
-                usageCount: 0,
-                successCount: 0,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            };
-        }
-    }
-    else {
-        // Find template by ID from database
-        const { data: templates, error } = await supabase_1.supabase
-            .from('prompt_templates')
-            .select('*')
-            .eq('id', templateId)
-            .single();
-        if (!error && templates) {
-            // Map database template to PromptTemplate type
-            template = {
-                id: templates.id,
-                templateKey: templates.template_key,
-                templateNameKo: templates.template_name_ko,
-                templateNameEn: templates.template_name_en,
-                category: templates.category,
-                subcategory: templates.subcategory,
-                basePrompt: templates.base_prompt,
-                examplePrompt: templates.example_prompt,
-                negativePrompt: templates.negative_prompt,
-                description: templates.description,
-                promptVariables: templates.prompt_variables || [],
-                requirements: templates.requirements || {},
-                priority: templates.priority || 50,
-                usageCount: templates.usage_count || 0,
-                successCount: templates.success_count || 0,
-                successRate: templates.success_rate,
-                averageProcessingTimeMs: templates.average_processing_time_ms,
-                estimatedCost: templates.estimated_cost,
-                isActive: templates.is_active,
-                createdAt: new Date(templates.created_at),
-                updatedAt: new Date(templates.updated_at)
-            };
-        }
     }
     if (!template) {
         console.error(`❌ Template not found for ID: ${templateId}`);
@@ -745,44 +670,44 @@ function getDefaultSuggestions(imageCount) {
         },
         {
             templateId: 2,
-            templateKey: 'portrait_styling_redcarpet',
-            displayName: '✨ 레드카펫 스타일',
+            templateKey: 'red_carpet',
+            displayName: '🌟 레드카펫 스타일',
             description: '고급스러운 레드카펫 스타일로 변환합니다',
             confidence: 0.85,
-            priority: 90,
+            priority: 92,
             requiredImages: 1,
             estimatedTime: 12,
             estimatedCost: 0.002
         },
         {
             templateId: 3,
-            templateKey: 'quality_enhance',
-            displayName: '🔧 화질 개선',
-            description: '이미지 화질을 향상시킵니다',
+            templateKey: 'night_portrait_paris',
+            displayName: '🌃 파리의 밤 인물사진',
+            description: '파리 야경과 함께 낭만적인 인물 사진',
             confidence: 0.8,
+            priority: 88,
+            requiredImages: 1,
+            estimatedTime: 10,
+            estimatedCost: 0.001
+        },
+        {
+            templateId: 6,
+            templateKey: 'dramatic_bw',
+            displayName: '⚫ 드라마틱 흑백사진',
+            description: '감각적인 흑백 사진으로 변환합니다',
+            confidence: 0.75,
             priority: 85,
             requiredImages: 1,
             estimatedTime: 10,
             estimatedCost: 0.001
         },
         {
-            templateId: 4,
-            templateKey: 'vintage_portrait',
-            displayName: '📷 빈티지 스타일',
-            description: '클래식한 빈티지 분위기로 변환합니다',
-            confidence: 0.75,
-            priority: 80,
-            requiredImages: 1,
-            estimatedTime: 10,
-            estimatedCost: 0.001
-        },
-        {
-            templateId: 5,
-            templateKey: 'black_white_dramatic',
-            displayName: '⚫ 드라마틱 흑백',
-            description: '감각적인 흑백 사진으로 변환합니다',
+            templateId: 32,
+            templateKey: 'quality_enhance',
+            displayName: '✨ 화질 개선',
+            description: '이미지 화질을 향상시킵니다',
             confidence: 0.7,
-            priority: 75,
+            priority: 89,
             requiredImages: 1,
             estimatedTime: 8,
             estimatedCost: 0.001
@@ -790,58 +715,58 @@ function getDefaultSuggestions(imageCount) {
     ];
     const multiImageSuggestions = [
         {
-            templateId: 11,
-            templateKey: 'multi_image_composite',
-            displayName: '🎨 이미지 합성',
+            templateId: 18,
+            templateKey: 'multi_merge',
+            displayName: '🎨 다중 이미지 합성',
             description: '여러 이미지를 하나로 합성합니다',
             confidence: 0.9,
-            priority: 95,
+            priority: 91,
             requiredImages: 2,
             estimatedTime: 20,
             estimatedCost: 0.003
         },
         {
-            templateId: 12,
+            templateId: 19,
             templateKey: 'outfit_swap',
             displayName: '👔 의상 교체',
             description: '이미지 간 의상을 교체합니다',
             confidence: 0.85,
-            priority: 90,
+            priority: 87,
             requiredImages: 2,
             estimatedTime: 18,
             estimatedCost: 0.003
         },
         {
-            templateId: 13,
+            templateId: 23,
             templateKey: 'background_replace',
-            displayName: '🏞️ 배경 통일',
-            description: '모든 이미지의 배경을 통일합니다',
+            displayName: '🏞️ 배경 교체',
+            description: '이미지의 배경을 교체합니다',
             confidence: 0.8,
-            priority: 85,
-            requiredImages: 2,
+            priority: 93,
+            requiredImages: 1,
             estimatedTime: 15,
             estimatedCost: 0.002
         },
         {
-            templateId: 14,
+            templateId: 22,
             templateKey: 'album_9_photos',
-            displayName: '📸 9장 앨범',
+            displayName: '📸 9장 앨범 생성',
             description: '9장의 앨범 형태로 만듭니다',
             confidence: 0.75,
-            priority: 80,
-            requiredImages: 9,
-            estimatedTime: 12,
-            estimatedCost: 0.002
+            priority: 77,
+            requiredImages: 1,
+            estimatedTime: 25,
+            estimatedCost: 0.004
         },
         {
-            templateId: 15,
-            templateKey: 'sticker_photo_9',
-            displayName: '🎯 스티커 사진',
-            description: '스티커 사진 형태로 만듭니다',
+            templateId: 27,
+            templateKey: 'season_change',
+            displayName: '🍂 계절 변경',
+            description: '이미지의 계절을 변경합니다',
             confidence: 0.7,
-            priority: 75,
-            requiredImages: 4,
-            estimatedTime: 10,
+            priority: 66,
+            requiredImages: 1,
+            estimatedTime: 15,
             estimatedCost: 0.002
         }
     ];
