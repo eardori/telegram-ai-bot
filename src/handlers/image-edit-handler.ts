@@ -22,6 +22,8 @@ import {
 
 // Session storage (in production, use Redis or database)
 const editSessions = new Map<string, EditSession>();
+// Map short IDs to full session IDs for callback data
+const sessionIdMap = new Map<string, string>();
 
 // Services
 const imageAnalyzer = new ImageAnalyzer();
@@ -55,11 +57,19 @@ async function handlePhotoUpload(ctx: Context) {
       return;
     }
 
+    const caption = ctx.message.caption || '';
+    const triggerWord = process.env.IMAGE_EDIT_TRIGGER_WORD || '도비야';
+
+    // Only respond if trigger word is in caption
+    // IMPORTANT: This prevents the bot from responding to all photo uploads
+    if (!caption.includes(triggerWord)) {
+      return;
+    }
+
     const userId = ctx.from.id;
     const chatId = ctx.chat?.id || userId;
     const messageId = ctx.message.message_id;
     const photos = ctx.message.photo;
-    const caption = ctx.message.caption || '';
 
     // Get largest photo
     const largestPhoto = photos[photos.length - 1];
@@ -209,7 +219,11 @@ async function showSuggestions(
   }
 
   // Store session ID for callback handling
-  const sessionId = (session as any).sessionId || `${session.userId}_${session.chatId}`;
+  const fullSessionId = (session as any).sessionId || `${session.userId}_${session.chatId}`;
+
+  // Create short session ID for callback data (Telegram limit: 64 bytes)
+  const shortSessionId = Math.random().toString(36).substr(2, 9);
+  sessionIdMap.set(shortSessionId, fullSessionId);
 
   // Build analysis summary
   let summary = '📊 **이미지 분석 결과**\n\n';
@@ -236,10 +250,10 @@ async function showSuggestions(
     const confidence = Math.round(suggestion.confidence * 100);
     const emoji = getEmojiForTemplate(suggestion.templateKey);
 
-    // Add button for each suggestion
+    // Add button for each suggestion (use templateId to shorten callback data)
     keyboard.text(
-      `${emoji} ${suggestion.displayName} (${confidence}%)`,
-      `edit:${suggestion.templateKey}:${sessionId}`
+      `${emoji} ${suggestion.displayName}`,
+      `e:${suggestion.templateId}:${shortSessionId}`
     );
 
     if (index < suggestions.length - 1) {
@@ -255,10 +269,10 @@ async function showSuggestions(
     summary += '\n';
   });
 
-  // Add custom edit option
+  // Add custom edit option (shortened callback data)
   keyboard.row();
-  keyboard.text('✏️ 커스텀 편집', `custom:${sessionId}`);
-  keyboard.text('❌ 취소', `cancel:${sessionId}`);
+  keyboard.text('✏️ 커스텀 편집', `c:${shortSessionId}`);
+  keyboard.text('❌ 취소', `x:${shortSessionId}`);
 
   await ctx.reply(summary, {
     parse_mode: 'Markdown',
@@ -284,20 +298,33 @@ async function handleCallbackQuery(ctx: Context) {
     }
 
     // Parse callback data
-    const parts = data.split(':');
-    const action = parts[0];
+    const [action, ...params] = data.split(':');
+
+    // Resolve short session ID to full session ID
+    let sessionId = '';
+    if (params.length > 0) {
+      const shortId = params[params.length - 1];
+      sessionId = sessionIdMap.get(shortId) || shortId;
+    }
 
     switch (action) {
-      case 'edit':
-        await handleEditSelection(ctx, parts[1], parts[2]);
+      case 'e': // edit (shortened from 'edit')
+        const templateId = parseInt(params[0], 10);
+        await handleEditSelectionById(ctx, sessionId, templateId);
         break;
 
-      case 'custom':
-        await handleCustomEdit(ctx, parts[1]);
+      case 'edit': // legacy support
+        await handleEditSelection(ctx, params[1], params[2]);
         break;
 
-      case 'cancel':
-        await handleCancelEdit(ctx, parts[1]);
+      case 'c': // custom (shortened from 'custom')
+      case 'custom': // legacy support
+        await handleCustomEdit(ctx, sessionId || params[0]);
+        break;
+
+      case 'x': // cancel (shortened from 'cancel')
+      case 'cancel': // legacy support
+        await handleCancelEdit(ctx, sessionId || params[0]);
         break;
 
       case 'start_edit':
@@ -434,6 +461,62 @@ async function handleEditSelection(ctx: Context, templateKey: string, sessionId:
     console.error('Edit selection error:', error);
     await ctx.answerCallbackQuery('❌ 편집 중 오류가 발생했습니다.');
   }
+}
+
+/**
+ * Handle edit selection by template ID
+ */
+async function handleEditSelectionById(ctx: Context, sessionId: string, templateId: number) {
+  const session = editSessions.get(sessionId);
+  if (!session) {
+    await ctx.answerCallbackQuery('❌ 세션이 만료되었습니다.');
+    return;
+  }
+
+  // Find template by ID from database
+  const { data: templates, error } = await supabase
+    .from('prompt_templates')
+    .select('*')
+    .eq('id', templateId)
+    .single();
+
+  if (error || !templates) {
+    await ctx.answerCallbackQuery('❌ 템플릿을 찾을 수 없습니다.');
+    return;
+  }
+
+  // Map database template to PromptTemplate type
+  const template: PromptTemplate = {
+    id: templates.id,
+    templateKey: templates.template_key,
+    templateNameKo: templates.template_name_ko,
+    templateNameEn: templates.template_name_en,
+    category: templates.category,
+    subcategory: templates.subcategory,
+    basePrompt: templates.base_prompt,
+    examplePrompt: templates.example_prompt,
+    negativePrompt: templates.negative_prompt,
+    description: templates.description,
+    promptVariables: templates.prompt_variables || [],
+    requirements: templates.requirements || {},
+    priority: templates.priority || 50,
+    usageCount: templates.usage_count || 0,
+    successCount: templates.success_count || 0,
+    successRate: templates.success_rate,
+    averageProcessingTimeMs: templates.average_processing_time_ms,
+    estimatedCost: templates.estimated_cost,
+    isActive: templates.is_active,
+    createdAt: new Date(templates.created_at),
+    updatedAt: new Date(templates.updated_at)
+  };
+
+  if (!template) {
+    await ctx.answerCallbackQuery('❌ 템플릿을 찾을 수 없습니다.');
+    return;
+  }
+
+  // Use existing handleEditSelection logic
+  await handleEditSelection(ctx, sessionId, template.templateKey);
 }
 
 /**

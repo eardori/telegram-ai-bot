@@ -5,6 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ImageAnalyzer = void 0;
+const uuid_1 = require("uuid");
 // Environment variables
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const GEMINI_MODEL = 'gemini-1.5-pro-latest';
@@ -438,10 +439,10 @@ Return as JSON:
         return merged;
     }
     /**
-     * Generate unique ID
+     * Generate unique ID (UUID v4 format for database compatibility)
      */
     generateId() {
-        return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        return (0, uuid_1.v4)();
     }
 }
 exports.ImageAnalyzer = ImageAnalyzer;

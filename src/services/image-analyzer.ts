@@ -12,6 +12,7 @@ import {
   QualityMetrics,
   IImageAnalyzer
 } from '../types/image-edit.types';
+import { v4 as uuidv4 } from 'uuid';
 
 // Environment variables
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
@@ -525,9 +526,9 @@ Return as JSON:
   }
 
   /**
-   * Generate unique ID
+   * Generate unique ID (UUID v4 format for database compatibility)
    */
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return uuidv4();
   }
 }
