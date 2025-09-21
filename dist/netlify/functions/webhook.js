@@ -317,7 +317,6 @@ bot.use(async (ctx, next) => {
         }
     }
 });
-    * /;
 // Helper function to generate image with Imagen
 async function generateImageWithImagen(userInput, isDobby = false, userId, chatId) {
     const startTime = Date.now();
@@ -926,154 +925,11 @@ bot.command('maintenance', async (ctx) => {
     }
 });
 // Photo handling moved to image-edit-handler.ts for automatic AI suggestions
-// This handler is now disabled to avoid conflicts
-/*
-bot.on('message:photo', async (ctx) => {
-  console.log('📸 Photo message received');
-
-  // Skip if message is from the bot itself
-  if (ctx.from?.is_bot || ctx.from?.id === ctx.me?.id) {
-    return;
-  }
-
-  const caption = ctx.message.caption || '';
-
-  // Check if user wants analysis (with caption like "분석해줘", "뭐야", "설명해줘" or with "도비야")
-  const analysisKeywords = /(분석|설명|뭐야|뭐지|알려줘|무엇|what|analyze|describe|explain)/i;
-  const isDobbyRequest = caption.includes('도비야');
-
-  if (isDobbyRequest || analysisKeywords.test(caption)) {
-    console.log('🔍 Photo analysis requested');
-
-    try {
-      // Get the largest photo
-      const photo = ctx.message.photo[ctx.message.photo.length - 1];
-      const file = await ctx.api.getFile(photo.file_id);
-
-      if (!file.file_path) {
-        await ctx.reply('❌ 이미지 파일을 가져올 수 없습니다.');
-        return;
-      }
-
-      // Send processing message
-      const processingMsg = isDobbyRequest
-        ? await ctx.reply(`🧙‍♀️ **도비가 이미지를 분석하고 있습니다!**
-
-👁️ **마법의 눈으로 살펴보는 중...**
-🪄 도비의 분석 마법: Gemini Vision AI
-
-⚡ 잠시만 기다려주세요...`)
-        : await ctx.reply(`🔍 **이미지 분석 중...**
-
-👁️ AI가 이미지를 살펴보고 있습니다...
-🤖 분석 도구: Gemini Vision
-
-⏳ 잠시만 기다려주세요...`);
-
-      // Download image
-      const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-      const imageResponse = await fetchWithTimeout(imageUrl, {}, 10000);
-      const imageBuffer = await imageResponse.arrayBuffer();
-      const imageBase64 = Buffer.from(imageBuffer).toString('base64');
-
-      // Extract request from caption
-      const userRequest = caption.replace(/도비야[,\s]*/ i, '';
-trim();
-// Analyze image with Gemini Vision
-const analysisPrompt = userRequest
-    ? `Please analyze this image and respond to the user's request in Korean: "${userRequest}". Provide a detailed, helpful response.`
-    : `Please analyze this image in detail. Describe what you see, including:
-1. Main subjects and objects
-2. Setting/background
-3. Colors and composition
-4. Any text or notable details
-5. Overall mood or atmosphere
-
-Provide the analysis in Korean.`;
-console.log('🔍 Analyzing image with Gemini Vision...');
-const startTime = Date.now();
-// Call Gemini Vision API with timeout
-const visionResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${GOOGLE_API_KEY}`, {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-        contents: [{
-                parts: [
-                    { text: analysisPrompt },
-                    {
-                        inline_data: {
-                            mime_type: 'image/jpeg',
-                            data: imageBase64
-                        }
-                    }
-                ]
-            }]
-    })
-}, 15000);
-if (!visionResponse.ok) {
-    throw new Error(`Gemini Vision API error: ${visionResponse.status}`);
-}
-const visionData = await visionResponse.json();
-const analysis = visionData.candidates?.[0]?.content?.parts?.[0]?.text;
-if (!analysis) {
-    throw new Error('No analysis received from Gemini Vision');
-}
-const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
-const cost = calculateGeminiVisionCost();
-console.log('📝 Image analysis completed');
-// Delete processing message
-await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
-// Send analysis result
-const resultMessage = isDobbyRequest
-    ? `🧙‍♀️ **도비의 이미지 분석 완료!**
-
-${analysis}
-
-💰 비용: $${cost.toFixed(4)}
-⏱️ 처리 시간: ${processingTime}초
-👁️ 분석 도구: Gemini Vision AI
-
-도비가 도움이 되었기를 바랍니다! 🧙‍♀️`
-    : `🔍 **이미지 분석 결과**
-
-${analysis}
-
-💰 비용: $${cost.toFixed(4)}
-⏱️ 처리 시간: ${processingTime}초
-🤖 AI: Gemini Vision`;
-await ctx.reply(resultMessage, {
-    reply_to_message_id: ctx.message.message_id
-});
-console.log('✅ Image analysis sent successfully');
-try { }
-catch (error) {
-    console.error('❌ Image analysis error:', error);
-    const errorMessage = isDobbyRequest
-        ? `🧙‍♀️ **도비가 실수했습니다...**
-
-❌ 이미지 분석 중 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}
-
-💡 다시 시도해주세요!`
-        : `❌ **이미지 분석 실패**
-
-오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}
-
-💡 다시 시도해보세요.`;
-    await ctx.reply(errorMessage);
-}
-{
-    // If no analysis requested, just acknowledge the photo
-    await ctx.reply(`📸 사진을 받았습니다!
-
-💡 **사용 가능한 기능:**
-• 캡션에 "도비야, 분석해줘" - 이미지 분석
-• 캡션에 "뭐야?" 또는 "설명해줘" - 이미지 설명
-• Reply로 "편집해줘" - 이미지 편집
-• Reply로 "배경 바꿔줘" - 배경 변경`);
-}
-;
+// Old photo handler has been completely removed to avoid conflicts
+// Now all photo handling is done in image-edit-handler.ts which provides:
+// - Automatic AI analysis and edit suggestions when photos are uploaded
+// - Single photo: prioritizes figurine, styling, quality enhancement
+// - Multiple photos: prioritizes merging, outfit swap, background replacement
 // Handle ALL text messages - unified handler
 bot.on('message:text', async (ctx) => {
     const text = ctx.message.text;
