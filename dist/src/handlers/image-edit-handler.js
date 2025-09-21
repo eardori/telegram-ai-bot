@@ -44,10 +44,23 @@ async function handlePhotoUpload(ctx) {
         }
         const caption = ctx.message.caption || '';
         const triggerWord = process.env.IMAGE_EDIT_TRIGGER_WORD || '도비야';
-        // Only respond if trigger word is in caption
-        // IMPORTANT: This prevents the bot from responding to all photo uploads
-        if (!caption.includes(triggerWord)) {
-            return;
+        const mediaGroupId = ctx.message.media_group_id;
+        // For media groups (multiple photos), check if we should process this message
+        if (mediaGroupId) {
+            // Check if we already have a session for this media group
+            const groupSessionId = `${ctx.from.id}_${ctx.chat?.id || ctx.from.id}_group_${mediaGroupId}`;
+            const existingSession = editSessions.get(groupSessionId);
+            // If session exists and has trigger word, continue processing
+            // If no session exists, check for trigger word in current message
+            if (!existingSession && !caption.includes(triggerWord)) {
+                return;
+            }
+        }
+        else {
+            // Single photo - must have trigger word
+            if (!caption.includes(triggerWord)) {
+                return;
+            }
         }
         const userId = ctx.from.id;
         const chatId = ctx.chat?.id || userId;
@@ -57,8 +70,7 @@ async function handlePhotoUpload(ctx) {
         const largestPhoto = photos[photos.length - 1];
         // Use userId_chatId for session management (without messageId to avoid session loss)
         const sessionId = `${userId}_${chatId}`;
-        // Check for media group (multiple photos sent together)
-        const mediaGroupId = ctx.message.media_group_id;
+        // Check for media group (already declared above)
         const groupSessionId = mediaGroupId ? `${userId}_${chatId}_group_${mediaGroupId}` : sessionId;
         let session = editSessions.get(groupSessionId) || editSessions.get(sessionId);
         // Create new session if needed
@@ -89,7 +101,7 @@ async function handlePhotoUpload(ctx) {
                 // Check if more photos were added to this session
                 const currentSessionId = session.sessionId || groupSessionId;
                 const updatedSession = editSessions.get(currentSessionId);
-                if (updatedSession && updatedSession.state !== 'analyzing') {
+                if (updatedSession && updatedSession.state !== 'analyzing' && updatedSession.state !== 'completed') {
                     console.log(`🔍 Starting analysis for ${updatedSession.images.length} photos`);
                     updatedSession.state = 'analyzing';
                     await startImageAnalysis(ctx, updatedSession);
@@ -275,20 +287,24 @@ async function handleCallbackQuery(ctx) {
  */
 async function handleEditSelection(ctx, templateKey, sessionId) {
     try {
-        console.log(`🎯 Handling edit selection: ${templateKey}, session: ${sessionId}`);
+        console.log(`🎯 Handling edit selection: ${sessionId}, template: ${templateKey}`);
         // Try to find session with different possible IDs
         let session = editSessions.get(sessionId);
         if (!session) {
-            // Try without group suffix
+            // Try to find by iterating through all sessions matching user/chat
             const userId = ctx.from?.id;
             const chatId = ctx.chat?.id;
-            if (userId && chatId) {
-                const alternateId = `${userId}_${chatId}`;
-                session = editSessions.get(alternateId);
-                console.log(`🔍 Trying alternate session ID: ${alternateId}`);
+            for (const [key, value] of editSessions.entries()) {
+                if (userId && chatId && key.includes(`${userId}_${chatId}`)) {
+                    console.log(`🔍 Found session with key: ${key}`);
+                    session = value;
+                    sessionId = key;
+                    break;
+                }
             }
         }
         if (!session) {
+            console.error(`❌ No session found. Available sessions:`, Array.from(editSessions.keys()));
             await ctx.answerCallbackQuery('❌ 세션이 만료되었습니다. 다시 시작해주세요.');
             return;
         }
@@ -359,9 +375,23 @@ async function handleEditSelection(ctx, templateKey, sessionId) {
  * Handle edit selection by template ID
  */
 async function handleEditSelectionById(ctx, sessionId, templateId) {
-    const session = editSessions.get(sessionId);
+    let session = editSessions.get(sessionId);
+    // Try to find session with different variations
     if (!session) {
-        await ctx.answerCallbackQuery('❌ 세션이 만료되었습니다.');
+        // Try to find by iterating through all sessions
+        for (const [key, value] of editSessions.entries()) {
+            if (key.includes(`${ctx.from?.id}_${ctx.chat?.id}`)) {
+                console.log(`🔍 Found session with key: ${key}`);
+                session = value;
+                sessionId = key;
+                break;
+            }
+        }
+    }
+    if (!session) {
+        console.error(`❌ Session not found for: ${sessionId}`);
+        console.log('Available sessions:', Array.from(editSessions.keys()));
+        await ctx.answerCallbackQuery('❌ 세션이 만료되었습니다. 사진을 다시 업로드해주세요.');
         return;
     }
     // Find template by ID from database
