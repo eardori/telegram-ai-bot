@@ -327,15 +327,6 @@ async function handleEditSelection(ctx, templateKey, sessionId) {
         }
         // Mark session as completed
         session.state = 'completed';
-        // Ask for feedback
-        const feedbackKeyboard = new grammy_1.InlineKeyboard()
-            .text('⭐⭐⭐⭐⭐', `rate:5:${sessionId}`)
-            .text('⭐⭐⭐⭐', `rate:4:${sessionId}`)
-            .row()
-            .text('⭐⭐⭐', `rate:3:${sessionId}`)
-            .text('⭐⭐', `rate:2:${sessionId}`)
-            .text('⭐', `rate:1:${sessionId}`);
-        await ctx.reply('만족도를 평가해주세요:', { reply_markup: feedbackKeyboard });
     }
     catch (error) {
         console.error('Edit selection error:', error);
