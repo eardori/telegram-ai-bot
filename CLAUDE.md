@@ -125,6 +125,70 @@ src/data/prompts/
 
 ## 🔧 프로젝트 구성
 
+### Git 설정 및 배포
+
+**⚠️ 중요: SSH 키 권한 문제**
+
+현재 SSH 키 (`~/.ssh/id_ed25519.pub`)가 `kevinoh87` 계정과 연결되어 있어 `eardori/telegram-ai-bot` 저장소에 push할 수 없습니다.
+
+**해결 방법:**
+
+1. **방법 1**: eardori GitHub 계정에 현재 SSH 키 추가
+   ```bash
+   # 공개 키 출력
+   cat ~/.ssh/id_ed25519.pub
+   # → ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICESKFgj94YQUtywEZg8SPrJ4+oka5domdKftnjbpTQu kevin.oh@onda.me
+
+   # GitHub (eardori 계정) > Settings > SSH and GPG keys > New SSH key
+   # 위 공개 키를 추가
+   ```
+
+2. **방법 2**: eardori 계정용 새 SSH 키 생성
+   ```bash
+   ssh-keygen -t ed25519 -C "eardori@gmail.com" -f ~/.ssh/id_ed25519_eardori
+
+   # SSH config 설정 (~/.ssh/config)
+   Host github-eardori
+     HostName github.com
+     User git
+     IdentityFile ~/.ssh/id_ed25519_eardori
+
+   # 원격 저장소 URL 변경
+   git remote set-url origin git@github-eardori:eardori/telegram-ai-bot.git
+   ```
+
+3. **방법 3**: Personal Access Token 사용 (HTTPS)
+   ```bash
+   # GitHub (eardori 계정) > Settings > Developer settings > Personal access tokens
+   # repo 권한으로 토큰 생성
+
+   git remote set-url origin https://github.com/eardori/telegram-ai-bot.git
+   git push origin main
+   # Username: eardori
+   # Password: [생성한 Personal Access Token]
+   ```
+
+**현재 Git 설정:**
+```bash
+# 사용자 설정 (올바름)
+user.name: eardori
+user.email: eardori@gmail.com
+
+# 원격 저장소 (SSH로 설정됨)
+origin: git@github.com:eardori/telegram-ai-bot.git
+
+# 로컬 커밋 대기 중
+- 80ca066: Phase 5 구현
+- f371da3: 문서 업데이트
+```
+
+**배포 프로세스:**
+1. 위 방법 중 하나로 SSH 키 또는 토큰 설정
+2. `git push origin main` 실행
+3. Render.com 자동 배포 대기 (2-3분)
+
+---
+
 ### 환경 변수
 ```bash
 # Telegram
