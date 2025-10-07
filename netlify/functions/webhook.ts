@@ -1056,18 +1056,18 @@ bot.command('nsfw_imagine', async (ctx) => {
   console.log(`🔞 NSFW image generation requested: "${prompt}"`);
 
   try {
-    // Check daily limit
-    const { data: limitCheck } = await supabase.rpc('check_nsfw_daily_limit', {
-      p_user_id: ctx.from!.id
-    });
+    // Check daily limit - DISABLED FOR TESTING
+    // const { data: limitCheck } = await supabase.rpc('check_nsfw_daily_limit', {
+    //   p_user_id: ctx.from!.id
+    // });
 
-    if (!limitCheck) {
-      await ctx.reply(`❌ **일일 생성 제한 초과**
+    // if (!limitCheck) {
+    //   await ctx.reply(`❌ **일일 생성 제한 초과**
 
-오늘은 이미 5회의 NSFW 콘텐츠를 생성하셨습니다.
-내일 다시 시도해주세요.`);
-      return;
-    }
+    // 오늘은 이미 5회의 NSFW 콘텐츠를 생성하셨습니다.
+    // 내일 다시 시도해주세요.`);
+    //   return;
+    // }
 
     const generatingMessage = await ctx.reply(`🔞 **NSFW 이미지 생성 중...**
 
@@ -1191,18 +1191,18 @@ bot.command('nsfw_video', async (ctx) => {
   console.log(`🔞 NSFW video generation requested: "${prompt}"`);
 
   try {
-    // Check daily limit
-    const { data: limitCheck } = await supabase.rpc('check_nsfw_daily_limit', {
-      p_user_id: ctx.from!.id
-    });
+    // Check daily limit - DISABLED FOR TESTING
+    // const { data: limitCheck } = await supabase.rpc('check_nsfw_daily_limit', {
+    //   p_user_id: ctx.from!.id
+    // });
 
-    if (!limitCheck) {
-      await ctx.reply(`❌ **일일 생성 제한 초과**
+    // if (!limitCheck) {
+    //   await ctx.reply(`❌ **일일 생성 제한 초과**
 
-오늘은 이미 5회의 NSFW 콘텐츠를 생성하셨습니다.
-내일 다시 시도해주세요.`);
-      return;
-    }
+    // 오늘은 이미 5회의 NSFW 콘텐츠를 생성하셨습니다.
+    // 내일 다시 시도해주세요.`);
+    //   return;
+    // }
 
     const generatingMessage = await ctx.reply(`🔞 **NSFW 비디오 생성 중...**
 
