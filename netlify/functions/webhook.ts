@@ -1134,11 +1134,27 @@ bot.command('nsfw_imagine', async (ctx) => {
 
   } catch (error) {
     console.error('❌ NSFW image generation error:', error);
+
+    // Extract meaningful error message
+    let errorMsg = 'Unknown error';
+    if (error instanceof Error) {
+      if (error.message.includes('403')) {
+        errorMsg = 'API 접근 거부 (403). Replicate 계정 또는 토큰을 확인해주세요.';
+      } else if (error.message.includes('401')) {
+        errorMsg = 'API 인증 실패. 토큰이 올바르지 않습니다.';
+      } else if (error.message.includes('429')) {
+        errorMsg = 'API 사용량 한도 초과. 잠시 후 다시 시도해주세요.';
+      } else {
+        // Use only first 100 characters of error message
+        errorMsg = error.message.substring(0, 100);
+      }
+    }
+
     await ctx.reply(`❌ **NSFW 이미지 생성 실패**
 
-오류: ${(error as Error).message}
+오류: ${errorMsg}
 
-💡 다른 프롬프트로 다시 시도해주세요.`);
+💡 관리자에게 문의하거나 잠시 후 다시 시도해주세요.`);
   }
 });
 

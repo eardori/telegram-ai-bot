@@ -57,6 +57,10 @@ const tracking_types_1 = require("../../src/types/tracking.types");
 const version_manager_1 = require("../../src/utils/version-manager");
 // Import image editing handlers
 const image_edit_handler_1 = require("../../src/handlers/image-edit-handler");
+// Import Replicate service
+const replicate_service_1 = require("../../src/services/replicate-service");
+// Import Supabase
+const supabase_1 = require("../../src/utils/supabase");
 // Environment variables - support both Netlify and Render naming
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
@@ -886,6 +890,224 @@ bot.command('generate', async (ctx) => {
     }
     catch (error) {
         await handleError(ctx, error, '이미지 생성', generatingMessage);
+    }
+});
+// NSFW Image Generation with Replicate
+bot.command('nsfw_imagine', async (ctx) => {
+    const prompt = ctx.message?.text?.replace('/nsfw_imagine', '').trim() || '';
+    if (!prompt) {
+        await ctx.reply(`🔞 **NSFW 이미지 생성 사용법:**
+
+/nsfw_imagine [프롬프트]
+
+⚠️ **주의사항:**
+• 성인용 콘텐츠 생성 기능입니다
+• 일일 5회 제한
+• 20 토큰 소모
+• 처리 시간: 약 30-60초
+
+💡 **예시:**
+• /nsfw_imagine beautiful woman in elegant dress
+• /nsfw_imagine artistic portrait photography
+
+🤖 **AI**: Stable Diffusion XL (Replicate)`);
+        return;
+    }
+    if (!replicate_service_1.replicateService.isAvailable()) {
+        await ctx.reply(`❌ **NSFW 생성 기능이 비활성화되어 있습니다.**
+
+관리자에게 문의하세요.`);
+        return;
+    }
+    console.log(`🔞 NSFW image generation requested: "${prompt}"`);
+    try {
+        // Check daily limit
+        const { data: limitCheck } = await supabase_1.supabase.rpc('check_nsfw_daily_limit', {
+            p_user_id: ctx.from.id
+        });
+        if (!limitCheck) {
+            await ctx.reply(`❌ **일일 생성 제한 초과**
+
+오늘은 이미 5회의 NSFW 콘텐츠를 생성하셨습니다.
+내일 다시 시도해주세요.`);
+            return;
+        }
+        const generatingMessage = await ctx.reply(`🔞 **NSFW 이미지 생성 중...**
+
+📝 프롬프트: "${prompt}"
+🤖 AI: Stable Diffusion XL
+⏳ 약 30-60초 소요됩니다...
+
+🔔 완료되면 알림을 보내드립니다.`);
+        // Create database record
+        const { data: generation, error: dbError } = await supabase_1.supabase
+            .from('nsfw_generations')
+            .insert({
+            user_id: ctx.from.id,
+            chat_id: ctx.chat.id,
+            type: 'image',
+            prompt: prompt,
+            model_version: 'sdxl',
+            status: 'processing'
+        })
+            .select()
+            .single();
+        if (dbError) {
+            console.error('❌ Failed to create generation record:', dbError);
+            await ctx.api.editMessageText(ctx.chat.id, generatingMessage.message_id, '❌ 데이터베이스 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+            return;
+        }
+        // Generate image
+        const imageUrls = await replicate_service_1.replicateService.generateNSFWImage(prompt);
+        // Update database
+        await supabase_1.supabase
+            .from('nsfw_generations')
+            .update({
+            status: 'completed',
+            output_url: imageUrls[0],
+            completed_at: new Date().toISOString()
+        })
+            .eq('id', generation.id);
+        // Delete processing message
+        await ctx.api.deleteMessage(ctx.chat.id, generatingMessage.message_id);
+        // Send result
+        for (const url of imageUrls) {
+            await ctx.replyWithPhoto(url, {
+                caption: imageUrls.length === 1 ? `✨ **NSFW 이미지 생성 완료!**
+
+📝 프롬프트: "${prompt}"
+🤖 AI: Stable Diffusion XL
+💰 비용: 20 토큰
+
+🔞 성인용 콘텐츠입니다.` : undefined
+            });
+        }
+        console.log('✅ NSFW image generated successfully!');
+    }
+    catch (error) {
+        console.error('❌ NSFW image generation error:', error);
+        // Extract meaningful error message
+        let errorMsg = 'Unknown error';
+        if (error instanceof Error) {
+            if (error.message.includes('403')) {
+                errorMsg = 'API 접근 거부 (403). Replicate 계정 또는 토큰을 확인해주세요.';
+            }
+            else if (error.message.includes('401')) {
+                errorMsg = 'API 인증 실패. 토큰이 올바르지 않습니다.';
+            }
+            else if (error.message.includes('429')) {
+                errorMsg = 'API 사용량 한도 초과. 잠시 후 다시 시도해주세요.';
+            }
+            else {
+                // Use only first 100 characters of error message
+                errorMsg = error.message.substring(0, 100);
+            }
+        }
+        await ctx.reply(`❌ **NSFW 이미지 생성 실패**
+
+오류: ${errorMsg}
+
+💡 관리자에게 문의하거나 잠시 후 다시 시도해주세요.`);
+    }
+});
+// NSFW Video Generation with Replicate
+bot.command('nsfw_video', async (ctx) => {
+    const prompt = ctx.message?.text?.replace('/nsfw_video', '').trim() || '';
+    if (!prompt) {
+        await ctx.reply(`🔞 **NSFW 비디오 생성 사용법:**
+
+/nsfw_video [프롬프트]
+
+⚠️ **주의사항:**
+• 성인용 비디오 생성 기능입니다
+• 일일 5회 제한
+• 30 토큰 소모
+• 처리 시간: 약 2-5분
+
+💡 **예시:**
+• /nsfw_video woman walking in the rain
+• /nsfw_video dancer performing on stage
+
+🤖 **AI**: Zeroscope V2 XL (Replicate)`);
+        return;
+    }
+    if (!replicate_service_1.replicateService.isAvailable()) {
+        await ctx.reply(`❌ **NSFW 생성 기능이 비활성화되어 있습니다.**
+
+관리자에게 문의하세요.`);
+        return;
+    }
+    console.log(`🔞 NSFW video generation requested: "${prompt}"`);
+    try {
+        // Check daily limit
+        const { data: limitCheck } = await supabase_1.supabase.rpc('check_nsfw_daily_limit', {
+            p_user_id: ctx.from.id
+        });
+        if (!limitCheck) {
+            await ctx.reply(`❌ **일일 생성 제한 초과**
+
+오늘은 이미 5회의 NSFW 콘텐츠를 생성하셨습니다.
+내일 다시 시도해주세요.`);
+            return;
+        }
+        const generatingMessage = await ctx.reply(`🔞 **NSFW 비디오 생성 중...**
+
+📝 프롬프트: "${prompt}"
+🤖 AI: Zeroscope V2 XL
+⏳ 약 2-5분 소요됩니다...
+
+🔔 완료되면 알림을 보내드립니다.`);
+        // Create database record
+        const { data: generation, error: dbError } = await supabase_1.supabase
+            .from('nsfw_generations')
+            .insert({
+            user_id: ctx.from.id,
+            chat_id: ctx.chat.id,
+            type: 'video',
+            prompt: prompt,
+            model_version: 'zeroscope-v2-xl',
+            status: 'processing',
+            tokens_used: 30
+        })
+            .select()
+            .single();
+        if (dbError) {
+            console.error('❌ Failed to create generation record:', dbError);
+            await ctx.api.editMessageText(ctx.chat.id, generatingMessage.message_id, '❌ 데이터베이스 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+            return;
+        }
+        // Generate video
+        const videoUrl = await replicate_service_1.replicateService.generateNSFWVideo(prompt);
+        // Update database
+        await supabase_1.supabase
+            .from('nsfw_generations')
+            .update({
+            status: 'completed',
+            output_url: videoUrl,
+            completed_at: new Date().toISOString()
+        })
+            .eq('id', generation.id);
+        // Delete processing message
+        await ctx.api.deleteMessage(ctx.chat.id, generatingMessage.message_id);
+        // Send result
+        await ctx.replyWithVideo(videoUrl, {
+            caption: `✨ **NSFW 비디오 생성 완료!**
+
+📝 프롬프트: "${prompt}"
+🤖 AI: Zeroscope V2 XL
+💰 비용: 30 토큰
+
+🔞 성인용 콘텐츠입니다.`
+        });
+        console.log('✅ NSFW video generated successfully!');
+    }
+    catch (error) {
+        console.error('❌ NSFW video generation error:', error);
+        await ctx.reply(`❌ **NSFW 비디오 생성 실패**
+
+오류: ${error.message}
+
+💡 다른 프롬프트로 다시 시도해주세요.`);
     }
 });
 bot.command('ask', async (ctx) => {
