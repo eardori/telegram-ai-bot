@@ -1,18 +1,47 @@
 # 📝 CLAUDE.md - 개발 컨텍스트 문서
 
-## 🎯 프로젝트 상태 (2025-01-07)
+## 🎯 프로젝트 상태 (2025-01-08)
 
 ### 현재 프로젝트: Pixie 업그레이드
 **목표**: MultifulDobi → Pixie로 진화
 **상세 계획**: `docs/PIXIE_MIGRATION_PLAN.md` (필독!)
 **PRD 문서**: `Pixie - PRD.md`
 
+### ⚡ 작업 순서 (사용자 승인)
+1. **Phase 5: 세션 수정** (1-2시간) ← 먼저 진행
+2. **Phase 1: 프롬프트 + Replicate** (2-3일)
+
+### 🆕 Replicate 통합 추가 (2025-01-08)
+**목적**: NSFW 이미지/비디오 생성 기능
+**상세**: `docs/PIXIE_MIGRATION_PLAN.md` - Phase 1, Section 1.3
+**필수 학습**: https://replicate.com/docs
+
+**주요 기능:**
+- `/nsfw_imagine` - NSFW 이미지 생성
+- `/nsfw_video` - NSFW 비디오 생성
+- `/animate` - 이미지 애니메이션 변환
+- Webhook 비동기 처리 (긴 작업용)
+- 일일 제한: 5회/일
+- 토큰 비용: 20-30 토큰
+
+**환경변수 추가 필요:**
+```
+REPLICATE_API_TOKEN=r8_...
+REPLICATE_WEBHOOK_URL=https://your-bot.onrender.com/api/replicate/webhook
+```
+
+**패키지 설치:**
+```bash
+npm install replicate
+npm install --save-dev @types/replicate
+```
+
 ### 구현 진행 상황
-- [ ] **Phase 1**: 프롬프트 관리 시스템 (0%) - 파일 기반 + DB 하이브리드
+- [ ] **Phase 5**: 세션 시스템 수정 (0%) - 기존 이슈 해결 ← 현재 작업
+- [ ] **Phase 1**: 프롬프트 관리 + Replicate (0%) - 파일 기반 + NSFW 기능
 - [ ] **Phase 2**: 토큰 경제 시스템 (0%) - 결제, 잔액, 거래내역
 - [ ] **Phase 3**: 그룹 채팅 기능 (0%) - 모니터링, 요약, 컨텍스트 답변
 - [ ] **Phase 4**: 관리자 대시보드 (0%) - 통계, 사용자 관리, 공지
-- [ ] **Phase 5**: 세션 시스템 수정 (0%) - 기존 이슈 해결
 - [ ] **Phase 6**: 최종 통합 테스트 (0%)
 
 ### 세션 재개 시 체크리스트

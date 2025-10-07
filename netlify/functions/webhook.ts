@@ -272,6 +272,89 @@ if (!BOT_TOKEN) {
 const bot = new Bot(BOT_TOKEN || 'dummy-token-for-build');
 
 // =============================================================================
+// CONVERSATION CONTEXT MANAGEMENT
+// =============================================================================
+
+// In-memory conversation context for session continuity
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+interface ConversationContext {
+  messages: ConversationMessage[];
+  lastActive: number;
+}
+
+const conversationContexts = new Map<string, ConversationContext>();
+const CONTEXT_MAX_MESSAGES = 10; // Keep last 10 messages (5 exchanges)
+const CONTEXT_TTL = 30 * 60 * 1000; // 30 minutes
+
+// Cleanup old contexts periodically
+setInterval(() => {
+  const now = Date.now();
+  conversationContexts.forEach((context, key) => {
+    if (now - context.lastActive > CONTEXT_TTL) {
+      conversationContexts.delete(key);
+      console.log(`🧹 Cleaned up conversation context for ${key}`);
+    }
+  });
+}, 5 * 60 * 1000); // Check every 5 minutes
+
+/**
+ * Get or create conversation context for a user
+ */
+function getConversationContext(userId: number, chatId: number): ConversationContext {
+  const key = `${userId}:${chatId}`;
+  let context = conversationContexts.get(key);
+
+  if (!context) {
+    context = {
+      messages: [],
+      lastActive: Date.now()
+    };
+    conversationContexts.set(key, context);
+    console.log(`✨ Created new conversation context for user ${userId} in chat ${chatId}`);
+  }
+
+  return context;
+}
+
+/**
+ * Add message to conversation context
+ */
+function addToContext(userId: number, chatId: number, role: 'user' | 'assistant', content: string): void {
+  const context = getConversationContext(userId, chatId);
+
+  context.messages.push({
+    role,
+    content,
+    timestamp: Date.now()
+  });
+
+  // Keep only last N messages
+  if (context.messages.length > CONTEXT_MAX_MESSAGES) {
+    context.messages = context.messages.slice(-CONTEXT_MAX_MESSAGES);
+  }
+
+  context.lastActive = Date.now();
+
+  console.log(`📝 Added ${role} message to context. Total messages: ${context.messages.length}`);
+}
+
+/**
+ * Get conversation history for Claude API
+ */
+function getContextMessages(userId: number, chatId: number): Array<{role: string, content: string}> {
+  const context = getConversationContext(userId, chatId);
+  return context.messages.map(msg => ({
+    role: msg.role,
+    content: msg.content
+  }));
+}
+
+// =============================================================================
 // DUPLICATE MESSAGE PREVENTION
 // =============================================================================
 
@@ -413,11 +496,31 @@ async function generateImageWithImagen(userInput: string, isDobby: boolean = fal
   }
 }
 
-// Helper function for Claude API with dynamic prompts
-async function callClaudeAPI(message: string, maxTokens: number = 2000, temperature: number = 0.7) {
+// Helper function for Claude API with dynamic prompts and conversation context
+async function callClaudeAPI(
+  message: string,
+  maxTokens: number = 2000,
+  temperature: number = 0.7,
+  conversationHistory: Array<{role: string, content: string}> = []
+) {
   const startTime = Date.now();
 
   try {
+    // Build messages array with conversation history
+    const messages: Array<{role: string, content: string}> = [];
+
+    // Add conversation history
+    if (conversationHistory.length > 0) {
+      messages.push(...conversationHistory);
+      console.log(`💬 Including ${conversationHistory.length} previous messages for context`);
+    }
+
+    // Add current message
+    messages.push({
+      role: 'user',
+      content: message
+    });
+
     // Use enhanced fetch with timeout
     const response = await fetchWithTimeout(
       'https://api.anthropic.com/v1/messages',
@@ -432,10 +535,7 @@ async function callClaudeAPI(message: string, maxTokens: number = 2000, temperat
           model: 'claude-3-5-sonnet-20241022',
           max_tokens: maxTokens,
           temperature: temperature,
-          messages: [{
-            role: 'user',
-            content: message
-          }]
+          messages: messages
         })
       },
       45000 // 45-second timeout for Claude API (increased from 20s due to timeouts)
@@ -639,7 +739,7 @@ function isDobbyActivated(text: string, isReply: boolean = false): { activated: 
   return { activated: true, command: 'ask', content: content };
 }
 
-// Enhanced Q&A function with dynamic prompts
+// Enhanced Q&A function with dynamic prompts and conversation context
 async function answerQuestion(question: string, isDobby: boolean = false, userId?: string, chatId?: string) {
   try {
     console.log(`🤔 Processing question: "${question}"`);
@@ -649,7 +749,27 @@ async function answerQuestion(question: string, isDobby: boolean = false, userId
 
     console.log(`📝 Using ${isDobby ? 'Dobby' : 'standard'} prompt template`);
 
-    const claudeResponse = await callClaudeAPI(prompt, maxTokens, temperature);
+    // Get conversation context if userId and chatId are provided
+    let conversationHistory: Array<{role: string, content: string}> = [];
+    if (userId && chatId) {
+      const userIdNum = parseInt(userId);
+      const chatIdNum = parseInt(chatId);
+      conversationHistory = getContextMessages(userIdNum, chatIdNum);
+
+      if (conversationHistory.length > 0) {
+        console.log(`🔄 Continuing conversation with ${conversationHistory.length} previous messages`);
+      }
+    }
+
+    const claudeResponse = await callClaudeAPI(prompt, maxTokens, temperature, conversationHistory);
+
+    // Store the conversation in context
+    if (userId && chatId) {
+      const userIdNum = parseInt(userId);
+      const chatIdNum = parseInt(chatId);
+      addToContext(userIdNum, chatIdNum, 'user', question);
+      addToContext(userIdNum, chatIdNum, 'assistant', claudeResponse.text);
+    }
 
     return {
       text: claudeResponse.text,

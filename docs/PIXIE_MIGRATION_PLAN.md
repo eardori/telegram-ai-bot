@@ -30,10 +30,11 @@
 
 ---
 
-## 📋 Phase 1: 프롬프트 관리 시스템 개선 (1-2일)
+## 📋 Phase 1: 프롬프트 관리 시스템 개선 + Replicate 통합 (2-3일)
 
 ### 목표
-기존 DB 기반 프롬프트를 파일 기반 하이브리드 구조로 전환하여 쉽게 추가/수정 가능하게 만들기
+1. 기존 DB 기반 프롬프트를 파일 기반 하이브리드 구조로 전환하여 쉽게 추가/수정 가능하게 만들기
+2. Replicate API 통합으로 NSFW 이미지/비디오 생성 기능 추가
 
 ### 작업 내용
 
@@ -80,7 +81,210 @@ src/data/prompts/
 }
 ```
 
-#### 1.3 PromptManager 클래스 구현
+#### 1.3 Replicate API 통합 (NSFW 콘텐츠 생성)
+
+**목적**: 일반 Gemini API로는 불가능한 NSFW 이미지/비디오 생성 지원
+
+**파일:** `src/services/replicate-service.ts`
+
+```typescript
+import Replicate from 'replicate';
+
+class ReplicateService {
+  private client: Replicate;
+
+  constructor() {
+    this.client = new Replicate({
+      auth: process.env.REPLICATE_API_TOKEN!,
+    });
+  }
+
+  // NSFW 이미지 생성
+  async generateNSFWImage(prompt: string, options?: {
+    width?: number;
+    height?: number;
+    num_outputs?: number;
+  }): Promise<string[]> {
+    const output = await this.client.run(
+      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+      {
+        input: {
+          prompt,
+          width: options?.width || 1024,
+          height: options?.height || 1024,
+          num_outputs: options?.num_outputs || 1,
+          negative_prompt: "ugly, bad quality, blurry",
+        }
+      }
+    );
+
+    return output as string[];
+  }
+
+  // NSFW 비디오 생성 (text-to-video)
+  async generateNSFWVideo(prompt: string): Promise<string> {
+    const output = await this.client.run(
+      "anotherjesse/zeroscope-v2-xl:9f747673945c62801b13b84701c783929c0ee784e4748ec062204894dda1a351",
+      {
+        input: {
+          prompt,
+          num_frames: 24,
+          fps: 8,
+        }
+      }
+    );
+
+    return output as string;
+  }
+
+  // 이미지-to-비디오 (기존 이미지를 애니메이션화)
+  async imageToVideo(imageUrl: string, prompt: string): Promise<string> {
+    const output = await this.client.run(
+      "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
+      {
+        input: {
+          input_image: imageUrl,
+          motion_bucket_id: 127,
+          frames_per_second: 8,
+        }
+      }
+    );
+
+    return output as string;
+  }
+
+  // Webhook으로 비동기 생성 (긴 작업용)
+  async generateWithWebhook(
+    model: string,
+    input: any,
+    webhookUrl: string
+  ): Promise<string> {
+    const prediction = await this.client.predictions.create({
+      version: model,
+      input,
+      webhook: webhookUrl,
+      webhook_events_filter: ["completed"],
+    });
+
+    return prediction.id;
+  }
+}
+
+export const replicateService = new ReplicateService();
+```
+
+**환경변수 추가:** `.env`
+```bash
+REPLICATE_API_TOKEN=r8_your_api_token_here
+REPLICATE_WEBHOOK_URL=https://your-bot.onrender.com/api/replicate/webhook
+```
+
+**사용자 명령어:**
+```
+/nsfw_imagine [프롬프트] - NSFW 이미지 생성
+/nsfw_video [프롬프트] - NSFW 비디오 생성
+/animate [이미지 첨부] - 이미지를 애니메이션으로 변환
+```
+
+**보안 고려사항:**
+1. 사용자 연령 확인 (선택 사항)
+2. 일일 NSFW 생성 제한 (예: 5회)
+3. 토큰 비용 증가 (NSFW: 20-30 토큰)
+4. 컨텐츠 필터링 로그 보관
+
+**데이터베이스 스키마 추가:** `sql/013_replicate_features.sql`
+```sql
+-- NSFW 콘텐츠 생성 기록
+CREATE TABLE nsfw_generations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id BIGINT REFERENCES users(telegram_id),
+    type VARCHAR(20) NOT NULL, -- 'image' or 'video'
+    prompt TEXT NOT NULL,
+    model_version VARCHAR(100),
+    output_url TEXT,
+    tokens_used INTEGER DEFAULT 20,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 인덱스
+CREATE INDEX idx_nsfw_user_date ON nsfw_generations(user_id, created_at DESC);
+
+-- 일일 제한 체크 함수
+CREATE OR REPLACE FUNCTION check_nsfw_daily_limit(p_user_id BIGINT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    daily_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO daily_count
+    FROM nsfw_generations
+    WHERE user_id = p_user_id
+    AND created_at > NOW() - INTERVAL '24 hours';
+
+    RETURN daily_count < 5; -- 일일 5회 제한
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Webhook 핸들러:** `netlify/functions/replicate-webhook.ts`
+```typescript
+import { Handler } from '@netlify/functions';
+import { bot } from '../../src/bot';
+
+export const handler: Handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
+
+  const { id, status, output } = JSON.parse(event.body!);
+
+  if (status === 'succeeded') {
+    // 생성 완료 - 사용자에게 전송
+    const session = await getSessionByPredictionId(id);
+    if (session) {
+      await bot.api.sendMessage(session.chatId, '✅ 생성 완료!');
+
+      if (Array.isArray(output)) {
+        // 이미지 배열
+        for (const url of output) {
+          await bot.api.sendPhoto(session.chatId, url);
+        }
+      } else {
+        // 비디오 URL
+        await bot.api.sendVideo(session.chatId, output);
+      }
+    }
+  } else if (status === 'failed') {
+    // 실패 처리
+    const session = await getSessionByPredictionId(id);
+    if (session) {
+      await bot.api.sendMessage(
+        session.chatId,
+        '❌ 생성 실패. 다시 시도해주세요.'
+      );
+    }
+  }
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ received: true })
+  };
+};
+```
+
+**패키지 설치:**
+```bash
+npm install replicate
+npm install --save-dev @types/replicate
+```
+
+**참고 문서:**
+- Replicate API Docs: https://replicate.com/docs
+- Node.js Client: https://replicate.com/docs/get-started/nodejs
+- Models: https://replicate.com/explore
+
+---
+
+#### 1.4 PromptManager 클래스 구현
 **파일:** `src/services/prompt-manager.ts`
 
 ```typescript
