@@ -34,6 +34,7 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "grammy": "^1.25.0",
+    "replicate": "^1.2.0",
     "typescript": "^5.5.0",
     "uuid": "^13.0.0"
   },

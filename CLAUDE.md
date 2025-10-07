@@ -38,7 +38,8 @@ npm install --save-dev @types/replicate
 
 ### 구현 진행 상황
 - [x] **Phase 5**: 세션 시스템 수정 (100%) ✅ 완료! (2025-01-08)
-- [ ] **Phase 1**: 프롬프트 관리 + Replicate (0%) - 파일 기반 + NSFW 기능 ← 다음 작업
+- [x] **Phase 1-B**: Replicate 통합 (100%) ✅ 완료! (2025-01-08)
+- [ ] **Phase 1-A**: 프롬프트 관리 (0%) - 파일 기반 시스템 ← 다음 작업
 - [ ] **Phase 2**: 토큰 경제 시스템 (0%) - 결제, 잔액, 거래내역
 - [ ] **Phase 3**: 그룹 채팅 기능 (0%) - 모니터링, 요약, 컨텍스트 답변
 - [ ] **Phase 4**: 관리자 대시보드 (0%) - 통계, 사용자 관리, 공지
@@ -203,9 +204,9 @@ GOOGLE_API_KEY=
 SUPABASE_URL=
 SUPABASE_ANON_KEY=
 
-# Image Generation
-NANO_BANAFO_API_KEY=
-NANO_BANAFO_API_URL=
+# Replicate (NSFW 콘텐츠 생성) ← 새로 추가됨!
+REPLICATE_API_TOKEN=r8_your_api_token_here
+# Replicate 토큰 얻는 법: https://replicate.com/account/api-tokens
 
 # Admin
 ADMIN_USER_IDS=123456789,987654321
@@ -217,6 +218,12 @@ PAYMENT_PROVIDER_TOKEN=
 NODE_ENV=production
 ENABLE_HOT_RELOAD=false
 ```
+
+**⚠️ Replicate 설정 (Phase 1-B 완료):**
+1. https://replicate.com 가입
+2. https://replicate.com/account/api-tokens 에서 토큰 생성
+3. Render.com 환경변수에 `REPLICATE_API_TOKEN` 추가
+4. Supabase에서 SQL 실행: `sql/013_replicate_features.sql`
 
 ### 주요 파일 구조
 ```
