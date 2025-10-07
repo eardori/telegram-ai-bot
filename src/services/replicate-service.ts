@@ -12,6 +12,10 @@ interface GenerateImageOptions {
   height?: number;
   num_outputs?: number;
   negative_prompt?: string;
+  seed?: number;
+  steps?: number;
+  cfg_scale?: number;
+  scheduler?: string;
 }
 
 interface GenerateVideoOptions {
@@ -54,7 +58,7 @@ class ReplicateService {
 
   /**
    * Generate NSFW image from text prompt
-   * Uses Stable Diffusion XL model
+   * Uses Flux.1Dev Uncensored model (MSFLUX NSFW v3)
    */
   async generateNSFWImage(
     prompt: string,
@@ -64,18 +68,20 @@ class ReplicateService {
       throw new Error('Replicate service is not configured. Please add REPLICATE_API_TOKEN to environment variables.');
     }
 
-    console.log(`🎨 Generating NSFW image with Replicate: "${prompt}"`);
+    console.log(`🎨 Generating NSFW image with Replicate Flux.1Dev: "${prompt}"`);
 
     try {
       const output = await this.client.run(
-        "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+        "aisha-ai-official/flux.1dev-uncensored-msfluxnsfw-v3:b477d8fc3a62e591c6224e10020538c4a9c340fb1f494891aff60019ffd5bc48",
         {
           input: {
             prompt,
             width: options.width || 1024,
             height: options.height || 1024,
-            num_outputs: options.num_outputs || 1,
-            negative_prompt: options.negative_prompt || "ugly, bad quality, blurry, distorted",
+            steps: options.steps || 20,
+            seed: options.seed || -1,
+            cfg_scale: options.cfg_scale || 5,
+            scheduler: options.scheduler || "default",
           }
         }
       );

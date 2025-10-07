@@ -910,7 +910,7 @@ bot.command('nsfw_imagine', async (ctx) => {
 • /nsfw_imagine beautiful woman in elegant dress
 • /nsfw_imagine artistic portrait photography
 
-🤖 **AI**: Stable Diffusion XL (Replicate)`);
+🤖 **AI**: Flux.1Dev Uncensored (MSFLUX NSFW v3)`);
         return;
     }
     if (!replicate_service_1.replicateService.isAvailable()) {
@@ -935,7 +935,7 @@ bot.command('nsfw_imagine', async (ctx) => {
         const generatingMessage = await ctx.reply(`🔞 **NSFW 이미지 생성 중...**
 
 📝 프롬프트: "${prompt}"
-🤖 AI: Stable Diffusion XL
+🤖 AI: Flux.1Dev Uncensored
 ⏳ 약 30-60초 소요됩니다...
 
 🔔 완료되면 알림을 보내드립니다.`);
@@ -947,7 +947,7 @@ bot.command('nsfw_imagine', async (ctx) => {
             chat_id: ctx.chat.id,
             type: 'image',
             prompt: prompt,
-            model_version: 'sdxl',
+            model_version: 'flux-1dev-uncensored',
             status: 'processing'
         })
             .select()
@@ -976,7 +976,7 @@ bot.command('nsfw_imagine', async (ctx) => {
                 caption: imageUrls.length === 1 ? `✨ **NSFW 이미지 생성 완료!**
 
 📝 프롬프트: "${prompt}"
-🤖 AI: Stable Diffusion XL
+🤖 AI: Flux.1Dev Uncensored (MSFLUX NSFW v3)
 💰 비용: 20 토큰
 
 🔞 성인용 콘텐츠입니다.` : undefined
