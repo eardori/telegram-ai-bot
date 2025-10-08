@@ -823,12 +823,12 @@ function getFileId(key) {
     return fileIdCache.get(key);
 }
 // Template selection callback handler
-bot.callbackQuery(/^t:(.+):(.+)$/, async (ctx) => {
+bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
     try {
         const templateKey = ctx.match[1];
-        const fileKey = ctx.match[2];
-        // Parse fileKey to get chatId and messageId
-        const [chatId, messageId] = fileKey.split(':').map(Number);
+        const chatId = parseInt(ctx.match[2]);
+        const messageId = parseInt(ctx.match[3]);
+        const fileKey = `${chatId}:${messageId}`;
         // Try to get from cache first
         let fileId = getFileId(fileKey);
         // If not in cache, retrieve from database using message_id
@@ -972,10 +972,11 @@ bot.callbackQuery(/^t:(.+):(.+)$/, async (ctx) => {
 });
 // Action button handlers for edited images
 // Retry edit with different style
-bot.callbackQuery(/^retry:(.+)$/, async (ctx) => {
+bot.callbackQuery(/^retry:(.+):(.+)$/, async (ctx) => {
     try {
-        const fileKey = ctx.match[1];
-        const [chatId, messageId] = fileKey.split(':').map(Number);
+        const chatId = parseInt(ctx.match[1]);
+        const messageId = parseInt(ctx.match[2]);
+        const fileKey = `${chatId}:${messageId}`;
         let fileId = getFileId(fileKey);
         if (!fileId) {
             const { data } = await supabase_1.supabase
@@ -1020,10 +1021,11 @@ bot.callbackQuery(/^retry:(.+)$/, async (ctx) => {
     }
 });
 // Back to original image
-bot.callbackQuery(/^back:(.+)$/, async (ctx) => {
+bot.callbackQuery(/^back:(.+):(.+)$/, async (ctx) => {
     try {
-        const fileKey = ctx.match[1];
-        const [chatId, messageId] = fileKey.split(':').map(Number);
+        const chatId = parseInt(ctx.match[1]);
+        const messageId = parseInt(ctx.match[2]);
+        const fileKey = `${chatId}:${messageId}`;
         let fileId = getFileId(fileKey);
         if (!fileId) {
             const { data } = await supabase_1.supabase
@@ -1056,11 +1058,12 @@ bot.callbackQuery(/^back:(.+)$/, async (ctx) => {
     }
 });
 // Re-edit with same style
-bot.callbackQuery(/^redo:(.+):(.+)$/, async (ctx) => {
+bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
     try {
         const templateKey = ctx.match[1];
-        const fileKey = ctx.match[2];
-        const [chatId, messageId] = fileKey.split(':').map(Number);
+        const chatId = parseInt(ctx.match[2]);
+        const messageId = parseInt(ctx.match[3]);
+        const fileKey = `${chatId}:${messageId}`;
         let fileId = getFileId(fileKey);
         if (!fileId) {
             const { data } = await supabase_1.supabase
