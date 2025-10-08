@@ -1000,6 +1000,44 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
             await ctx.reply('❌ 선택한 템플릿을 찾을 수 없습니다.');
             return;
         }
+        // ✨ CHECK IF PARAMETERIZED TEMPLATE
+        const { isParameterizedTemplate, getTemplateWithParameters } = await Promise.resolve().then(() => __importStar(require('../../src/services/parameterized-template-service')));
+        const isParam = await isParameterizedTemplate(templateKey);
+        if (isParam) {
+            console.log(`🎯 Parameterized template detected: ${templateKey}`);
+            // Fetch template with parameters and options
+            const templateWithParams = await getTemplateWithParameters(templateKey);
+            if (!templateWithParams || !templateWithParams.parameters || templateWithParams.parameters.length === 0) {
+                await ctx.reply('❌ 템플릿 파라미터를 찾을 수 없습니다.');
+                return;
+            }
+            // Get first parameter (for now, we only support single parameter)
+            const parameter = templateWithParams.parameters[0];
+            if (!parameter.options || parameter.options.length === 0) {
+                await ctx.reply('❌ 선택 가능한 옵션이 없습니다.');
+                return;
+            }
+            // Build parameter selection keyboard
+            const paramKeyboard = new grammy_1.InlineKeyboard();
+            let message = `🎨 **${template.template_name_ko}**\n\n`;
+            message += `📋 **${parameter.parameter_name_ko}**를 선택해주세요:\n\n`;
+            // Add option buttons (2 per row)
+            parameter.options.forEach((option, index) => {
+                paramKeyboard.text(`${option.emoji || '•'} ${option.option_name_ko}`, `param:${templateKey}:${parameter.parameter_key}:${option.option_key}:${fileKey}`);
+                // Create new row every 2 buttons
+                if ((index + 1) % 2 === 0 || index === parameter.options.length - 1) {
+                    paramKeyboard.row();
+                }
+            });
+            // Back button
+            paramKeyboard.text('🔙 뒤로가기', `back_to_main:${fileKey}`);
+            await ctx.reply(message, {
+                parse_mode: 'Markdown',
+                reply_markup: paramKeyboard
+            });
+            return;
+        }
+        // ✨ ORIGINAL FLOW FOR FIXED TEMPLATES
         // Get image URL from fileId
         const file = await ctx.api.getFile(fileId);
         if (!file.file_path) {
@@ -1099,6 +1137,162 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
     catch (error) {
         console.error('❌ Error in template callback:', error);
         await ctx.reply('❌ 템플릿 선택 처리 중 오류가 발생했습니다.');
+    }
+});
+// ✨ Parameter selection callback handler (for parameterized templates)
+bot.callbackQuery(/^param:([^:]+):([^:]+):([^:]+):(.+):(.+)$/, async (ctx) => {
+    try {
+        const templateKey = ctx.match[1];
+        const parameterKey = ctx.match[2];
+        const optionKey = ctx.match[3];
+        const chatId = parseInt(ctx.match[4]);
+        const messageId = parseInt(ctx.match[5]);
+        const fileKey = `${chatId}:${messageId}`;
+        console.log(`🎯 Parameter selected:`, {
+            template: templateKey,
+            parameter: parameterKey,
+            option: optionKey,
+            fileKey
+        });
+        // Answer callback to remove loading state
+        await ctx.answerCallbackQuery();
+        // Try to get fileId from cache first
+        let fileId = getFileId(fileKey);
+        // If not in cache, retrieve from database
+        if (!fileId) {
+            console.log(`🔍 FileId not in cache, retrieving from database for message ${messageId}...`);
+            const { data, error } = await supabase_1.supabase
+                .from('image_analysis_results')
+                .select('analysis_data')
+                .eq('message_id', messageId)
+                .single();
+            if (error || !data) {
+                await ctx.reply('이미지 정보를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+                return;
+            }
+            fileId = data.analysis_data?.file_id;
+            if (!fileId) {
+                await ctx.reply('파일 ID를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+                return;
+            }
+            storeFileId(chatId, messageId, fileId);
+            console.log(`✅ FileId retrieved from database and cached: ${fileId}`);
+        }
+        // Get image URL from fileId
+        const file = await ctx.api.getFile(fileId);
+        if (!file.file_path) {
+            await ctx.reply('❌ 원본 이미지를 찾을 수 없습니다.');
+            return;
+        }
+        const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        // Fetch template and parameter option
+        const { getTemplateWithParameters, getParameterOption, buildPromptWithParameters } = await Promise.resolve().then(() => __importStar(require('../../src/services/parameterized-template-service')));
+        const templateWithParams = await getTemplateWithParameters(templateKey);
+        const option = await getParameterOption(templateKey, parameterKey, optionKey);
+        if (!templateWithParams || !option) {
+            await ctx.reply('❌ 템플릿 정보를 찾을 수 없습니다.');
+            return;
+        }
+        // Build final prompt with selected parameter
+        const parameters = {
+            [parameterKey]: option.prompt_fragment
+        };
+        const finalPrompt = buildPromptWithParameters(templateWithParams.base_prompt, parameters);
+        console.log(`📝 Final prompt built:`, {
+            basePrompt: templateWithParams.base_prompt.substring(0, 50) + '...',
+            parameter: `{${parameterKey}}`,
+            fragment: option.prompt_fragment.substring(0, 50) + '...',
+            finalPrompt: finalPrompt.substring(0, 100) + '...'
+        });
+        // Send processing message
+        const processingMsg = await ctx.reply(`✨ **${templateWithParams.template_name_ko}** 편집 중...\n\n` +
+            `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n\n` +
+            `🎨 AI가 작업 중입니다. 잠시만 기다려주세요...`);
+        // Execute image editing with final prompt
+        const { editImageWithTemplate } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-edit-service')));
+        const editResult = await editImageWithTemplate({
+            imageUrl,
+            templatePrompt: finalPrompt,
+            templateName: `${templateWithParams.template_name_ko} - ${option.option_name_ko}`,
+            category: templateWithParams.template_type,
+            userId: ctx.from?.id,
+            chatId: ctx.chat?.id,
+            templateKey: templateKey
+        });
+        // Check for Cloudflare 403 specifically
+        if (!editResult.success && editResult.error?.includes('403')) {
+            await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `⚠️ **일시적 서비스 제한**\n\n` +
+                `Replicate API가 현재 Cloudflare에 의해 차단되어 있습니다.\n\n` +
+                `📧 관리자가 해결 중이니 잠시 후 다시 시도해주세요.\n\n` +
+                `💡 **대안:**\n` +
+                `• 다른 시간에 다시 시도\n` +
+                `• 다른 템플릿 사용\n` +
+                `• /help 로 다른 기능 확인`);
+            return;
+        }
+        if (editResult.success && (editResult.outputUrl || editResult.outputFile)) {
+            // Update processing message
+            await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ **편집 완료!**\n\n` +
+                `🎨 스타일: ${templateWithParams.template_name_ko}\n` +
+                `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n` +
+                `⏱️ 처리 시간: ${Math.round(editResult.processingTime / 1000)}초\n\n` +
+                `결과를 전송합니다...`);
+            // Create action buttons for the edited image
+            const actionKeyboard = new grammy_1.InlineKeyboard()
+                .text('🔄 다른 옵션 시도', `t:${templateKey}:${fileKey}`)
+                .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
+                .text('🎨 다른 스타일', `retry:${fileKey}`)
+                .text('⭐ 이 스타일 평가', `rate:${templateKey}`);
+            // Send edited image with action buttons
+            const photoSource = editResult.outputFile || editResult.outputUrl;
+            await ctx.replyWithPhoto(photoSource, {
+                caption: `✨ **${templateWithParams.template_name_ko}** 편집 완료!\n\n` +
+                    `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n` +
+                    `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요\n\n` +
+                    `💡 **다음 액션:**\n` +
+                    `• 🔄 다른 옵션으로 시도해보세요\n` +
+                    `• 🎨 완전히 다른 스타일로 변경하세요\n` +
+                    `• 💾 원본 이미지로 돌아갈 수 있습니다`,
+                reply_markup: actionKeyboard
+            });
+            // Store edit result in database (only if URL is available)
+            if (editResult.outputUrl) {
+                const { error: insertError } = await supabase_1.supabase
+                    .from('image_edit_results')
+                    .insert({
+                    user_id: ctx.from?.id,
+                    chat_id: ctx.chat?.id,
+                    original_image_url: imageUrl,
+                    edited_image_url: editResult.outputUrl,
+                    template_key: templateKey,
+                    template_name: templateWithParams.template_name_ko,
+                    prompt_used: finalPrompt,
+                    processing_time_ms: editResult.processingTime,
+                    success: true
+                });
+                if (insertError) {
+                    console.error('❌ Failed to store edit result:', insertError);
+                }
+                else {
+                    console.log('✅ Edit result stored in database');
+                }
+            }
+        }
+        else {
+            // Handle failure
+            let errorMsg = editResult.error || 'Unknown error';
+            if (errorMsg.length > 200) {
+                errorMsg = errorMsg.substring(0, 200) + '...';
+            }
+            await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `❌ **편집 실패**\n\n` +
+                `오류: ${errorMsg}\n\n` +
+                `💡 다른 옵션을 시도하거나 나중에 다시 시도해주세요.`);
+            console.error('❌ Parameterized edit failed:', editResult.error);
+        }
+    }
+    catch (error) {
+        console.error('❌ Error in parameter callback:', error);
+        await ctx.reply('❌ 파라미터 선택 처리 중 오류가 발생했습니다.');
     }
 });
 // Action button handlers for edited images
