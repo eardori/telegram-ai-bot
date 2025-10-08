@@ -1,6 +1,6 @@
 // Production Telegram Bot Webhook Handler
 import { Handler, HandlerContext, HandlerEvent } from '@netlify/functions';
-import { Bot, InputFile, webhookCallback } from 'grammy';
+import { Bot, InputFile, webhookCallback, InlineKeyboard } from 'grammy';
 
 // Constants
 const CLAUDE_MODEL = 'claude-3-5-sonnet-20241022';
@@ -886,7 +886,7 @@ bot.on('message:photo', async (ctx) => {
     message += `🔍 **분석 결과:**\n${uploadResult.analysisSummary || '분석 중...'}\n\n`;
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // Add recommendations
+    // Add recommendations with inline buttons
     if (uploadResult.recommendations && uploadResult.recommendations.length > 0) {
       message += `🎯 **추천 스타일** (적합도 순):\n\n`;
 
@@ -896,25 +896,159 @@ bot.on('message:photo', async (ctx) => {
         message += `   ↳ ${rec.reason} (${rec.confidence}%)\n\n`;
       });
 
-      message += `\n💡 버튼을 눌러 선택하거나 /edit 명령어를 사용하세요!\n`;
+      message += `\n💡 **아래 버튼을 눌러 스타일을 선택하세요:**\n`;
+
+      // Create inline keyboard with template buttons
+      const keyboard = new InlineKeyboard();
+
+      uploadResult.recommendations.slice(0, 4).forEach(rec => {
+        keyboard.text(
+          `${rec.emoji} ${rec.nameKo}`,
+          `template:${rec.templateKey}:${uploadResult.fileId}`
+        ).row();
+      });
+
+      // Add "View All" button
+      keyboard.text('🔍 전체 38개 스타일 보기', `template:view_all:${uploadResult.fileId}`);
+
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
     } else {
       message += `📸 **편집 옵션:**\n`;
       message += `• /edit - AI 스타일 편집\n`;
       message += `• 답장으로 "도비야 [요청]" - 직접 편집\n`;
-    }
 
-    await ctx.reply(message, { parse_mode: 'Markdown' });
+      await ctx.reply(message, { parse_mode: 'Markdown' });
+    }
 
     // TODO: Next steps
     // 1. ✅ Analyze image (DONE)
     // 2. ✅ Recommend templates (DONE)
-    // 3. Show inline buttons for template selection
+    // 3. ✅ Show inline buttons (DONE)
+    // 4. Handle button clicks (below)
 
   } catch (error) {
     console.error('❌ Error in photo handler:', error);
     await ctx.reply('❌ 사진 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
   }
 });
+
+// =============================================================================
+// CALLBACK QUERY HANDLERS (Inline Buttons)
+// =============================================================================
+
+// Template selection callback handler
+bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
+  try {
+    const templateKey = ctx.match[1];
+    const fileId = ctx.match[2];
+
+    console.log(`🎨 Template selected: ${templateKey} for file: ${fileId}`);
+
+    // Answer callback to remove loading state
+    await ctx.answerCallbackQuery();
+
+    // Handle "View All" button
+    if (templateKey === 'view_all') {
+      // Fetch all templates from database
+      const { data: allTemplates, error } = await supabase
+        .from('prompt_templates')
+        .select('*')
+        .eq('is_active', true)
+        .order('priority', { ascending: false });
+
+      if (error || !allTemplates) {
+        await ctx.reply('❌ 템플릿 목록을 가져오는 중 오류가 발생했습니다.');
+        return;
+      }
+
+      // Create paginated keyboard with all templates (8 per page)
+      const keyboard = new InlineKeyboard();
+      const templatesPerPage = 8;
+      const templates = allTemplates.slice(0, templatesPerPage);
+
+      templates.forEach(template => {
+        const emoji = getCategoryEmoji(template.category);
+        keyboard.text(
+          `${emoji} ${template.template_name_ko}`,
+          `template:${template.template_key}:${fileId}`
+        ).row();
+      });
+
+      // Add pagination if more than 8 templates
+      if (allTemplates.length > templatesPerPage) {
+        keyboard.text('➡️ 다음 페이지', `template_page:1:${fileId}`);
+      }
+
+      await ctx.reply('🎨 **전체 스타일 목록:**\n\n원하는 스타일을 선택하세요:', {
+        reply_markup: keyboard
+      });
+      return;
+    }
+
+    // Fetch selected template from database
+    const { data: template, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('template_key', templateKey)
+      .single();
+
+    if (error || !template) {
+      await ctx.reply('❌ 선택한 템플릿을 찾을 수 없습니다.');
+      return;
+    }
+
+    // Get image URL from fileId
+    const file = await ctx.api.getFile(fileId);
+    if (!file.file_path) {
+      await ctx.reply('❌ 원본 이미지를 찾을 수 없습니다.');
+      return;
+    }
+
+    const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+
+    // Send processing message
+    const processingMsg = await ctx.reply(
+      `✨ **${template.template_name_ko}** 스타일로 편집 중...\n\n` +
+      `🎨 AI가 작업 중입니다. 잠시만 기다려주세요...`
+    );
+
+    // TODO: Next step - Execute image editing with template
+    console.log('📋 Template details:', {
+      name: template.template_name_ko,
+      category: template.category,
+      prompt: template.base_prompt.substring(0, 100) + '...'
+    });
+
+    // Placeholder - will implement actual editing in next step
+    await ctx.api.editMessageText(
+      ctx.chat!.id,
+      processingMsg.message_id,
+      `⏳ **편집 준비 중...**\n\n` +
+      `📝 템플릿: ${template.template_name_ko}\n` +
+      `📸 원본 이미지: ${imageUrl.substring(0, 50)}...\n\n` +
+      `🚧 이미지 편집 실행 기능은 다음 단계에서 구현됩니다.`
+    );
+
+  } catch (error) {
+    console.error('❌ Error in template callback:', error);
+    await ctx.reply('❌ 템플릿 선택 처리 중 오류가 발생했습니다.');
+  }
+});
+
+// Helper function to get category emoji
+function getCategoryEmoji(category: string): string {
+  const emojiMap: Record<string, string> = {
+    '3d_figurine': '🎭',
+    'portrait_styling': '📸',
+    'game_animation': '🎮',
+    'image_editing': '🛠️',
+    'creative_transform': '✨'
+  };
+  return emojiMap[category] || '🎨';
+}
 
 // Bot commands
 bot.command('start', async (ctx) => {
