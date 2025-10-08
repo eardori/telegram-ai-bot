@@ -3879,11 +3879,9 @@ ${helpMessage}
   console.log(`💭 Regular message (not Dobby command): "${text}" - no response`);
 });
 
-// Register image editing handlers
-registerImageEditHandlers(bot);
-
 // =============================================================================
 // TELEGRAM STARS PAYMENT HANDLERS
+// Register BEFORE image editing handlers to prevent interception
 // =============================================================================
 
 /**
@@ -4163,6 +4161,14 @@ bot.on('message:successful_payment', async (ctx) => {
     await ctx.reply('❌ 결제 처리 중 오류가 발생했습니다. 관리자에게 문의해주세요.');
   }
 });
+
+// =============================================================================
+// IMAGE EDITING HANDLERS
+// Register AFTER payment handlers to allow payment buttons priority
+// =============================================================================
+
+// Register image editing handlers
+registerImageEditHandlers(bot);
 
 // Debug middleware - log ALL messages
 bot.use(async (ctx, next) => {

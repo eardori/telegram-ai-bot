@@ -3163,10 +3163,9 @@ ${helpMessage}
     // Only slash commands and messages with "도비야" should trigger responses
     console.log(`💭 Regular message (not Dobby command): "${text}" - no response`);
 });
-// Register image editing handlers
-(0, image_edit_handler_1.registerImageEditHandlers)(bot);
 // =============================================================================
 // TELEGRAM STARS PAYMENT HANDLERS
+// Register BEFORE image editing handlers to prevent interception
 // =============================================================================
 /**
  * Handle "buy credits" button click
@@ -3395,6 +3394,12 @@ bot.on('message:successful_payment', async (ctx) => {
         await ctx.reply('❌ 결제 처리 중 오류가 발생했습니다. 관리자에게 문의해주세요.');
     }
 });
+// =============================================================================
+// IMAGE EDITING HANDLERS
+// Register AFTER payment handlers to allow payment buttons priority
+// =============================================================================
+// Register image editing handlers
+(0, image_edit_handler_1.registerImageEditHandlers)(bot);
 // Debug middleware - log ALL messages
 bot.use(async (ctx, next) => {
     console.log('🔍 DEBUG - Message type:', ctx.message?.text ? 'text' : ctx.message?.photo ? 'photo' : 'other');
