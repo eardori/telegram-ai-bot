@@ -827,11 +827,30 @@ bot.callbackQuery(/^t:(.+):(.+)$/, async (ctx) => {
     try {
         const templateKey = ctx.match[1];
         const fileKey = ctx.match[2];
-        // Get actual file ID from cache
-        const fileId = getFileId(fileKey);
+        // Parse fileKey to get chatId and messageId
+        const [chatId, messageId] = fileKey.split(':').map(Number);
+        // Try to get from cache first
+        let fileId = getFileId(fileKey);
+        // If not in cache, retrieve from database using message_id
         if (!fileId) {
-            await ctx.answerCallbackQuery('세션이 만료되었습니다. 사진을 다시 업로드해주세요.');
-            return;
+            console.log(`🔍 FileId not in cache, retrieving from database for message ${messageId}...`);
+            const { data, error } = await supabase_1.supabase
+                .from('image_analysis_results')
+                .select('analysis_data')
+                .eq('message_id', messageId)
+                .single();
+            if (error || !data) {
+                await ctx.answerCallbackQuery('이미지 정보를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+                return;
+            }
+            fileId = data.analysis_data?.file_id;
+            if (!fileId) {
+                await ctx.answerCallbackQuery('파일 ID를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+                return;
+            }
+            // Store in cache for future use
+            storeFileId(chatId, messageId, fileId);
+            console.log(`✅ FileId retrieved from database and cached: ${fileId}`);
         }
         console.log(`🎨 Template selected: ${templateKey} for file: ${fileId}`);
         // Answer callback to remove loading state
@@ -956,7 +975,18 @@ bot.callbackQuery(/^t:(.+):(.+)$/, async (ctx) => {
 bot.callbackQuery(/^retry:(.+)$/, async (ctx) => {
     try {
         const fileKey = ctx.match[1];
-        const fileId = getFileId(fileKey);
+        const [chatId, messageId] = fileKey.split(':').map(Number);
+        let fileId = getFileId(fileKey);
+        if (!fileId) {
+            const { data } = await supabase_1.supabase
+                .from('image_analysis_results')
+                .select('analysis_data')
+                .eq('message_id', messageId)
+                .single();
+            fileId = data?.analysis_data?.file_id;
+            if (fileId)
+                storeFileId(chatId, messageId, fileId);
+        }
         if (!fileId) {
             await ctx.answerCallbackQuery('세션이 만료되었습니다.');
             return;
@@ -993,7 +1023,18 @@ bot.callbackQuery(/^retry:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^back:(.+)$/, async (ctx) => {
     try {
         const fileKey = ctx.match[1];
-        const fileId = getFileId(fileKey);
+        const [chatId, messageId] = fileKey.split(':').map(Number);
+        let fileId = getFileId(fileKey);
+        if (!fileId) {
+            const { data } = await supabase_1.supabase
+                .from('image_analysis_results')
+                .select('analysis_data')
+                .eq('message_id', messageId)
+                .single();
+            fileId = data?.analysis_data?.file_id;
+            if (fileId)
+                storeFileId(chatId, messageId, fileId);
+        }
         if (!fileId) {
             await ctx.answerCallbackQuery('세션이 만료되었습니다.');
             return;
@@ -1019,7 +1060,18 @@ bot.callbackQuery(/^redo:(.+):(.+)$/, async (ctx) => {
     try {
         const templateKey = ctx.match[1];
         const fileKey = ctx.match[2];
-        const fileId = getFileId(fileKey);
+        const [chatId, messageId] = fileKey.split(':').map(Number);
+        let fileId = getFileId(fileKey);
+        if (!fileId) {
+            const { data } = await supabase_1.supabase
+                .from('image_analysis_results')
+                .select('analysis_data')
+                .eq('message_id', messageId)
+                .single();
+            fileId = data?.analysis_data?.file_id;
+            if (fileId)
+                storeFileId(chatId, messageId, fileId);
+        }
         if (!fileId) {
             await ctx.answerCallbackQuery('세션이 만료되었습니다.');
             return;
