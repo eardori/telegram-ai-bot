@@ -1079,6 +1079,22 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       category: template.category
     });
 
+    // Check for Cloudflare 403 specifically
+    if (!editResult.success && editResult.error?.includes('403')) {
+      await ctx.api.editMessageText(
+        ctx.chat!.id,
+        processingMsg.message_id,
+        `⚠️ **일시적 서비스 제한**\n\n` +
+        `Replicate API가 현재 Cloudflare에 의해 차단되어 있습니다.\n\n` +
+        `📧 관리자가 해결 중이니 잠시 후 다시 시도해주세요.\n\n` +
+        `💡 **대안:**\n` +
+        `• 다른 시간에 다시 시도\n` +
+        `• 다른 템플릿 사용\n` +
+        `• /help 로 다른 기능 확인`
+      );
+      return;
+    }
+
     if (editResult.success && editResult.outputUrl) {
       // Update processing message
       await ctx.api.editMessageText(
@@ -1128,7 +1144,16 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
 
     } else {
       // Handle error
-      const errorMsg = editResult.error || 'Unknown error';
+      let errorMsg = editResult.error || 'Unknown error';
+
+      // Shorten error message if it's too long (Cloudflare HTML responses)
+      if (errorMsg.length > 200) {
+        if (errorMsg.includes('Cloudflare') || errorMsg.includes('403')) {
+          errorMsg = 'Replicate API 접근이 차단되었습니다 (Cloudflare 403). 잠시 후 다시 시도해주세요.';
+        } else {
+          errorMsg = errorMsg.substring(0, 200) + '...';
+        }
+      }
 
       await ctx.api.editMessageText(
         ctx.chat!.id,
@@ -1138,7 +1163,7 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         `💡 다른 스타일을 시도하거나 나중에 다시 시도해주세요.`
       );
 
-      console.error('❌ Edit failed:', errorMsg);
+      console.error('❌ Edit failed:', editResult.error);
     }
 
   } catch (error) {
