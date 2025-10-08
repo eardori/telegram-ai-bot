@@ -1978,6 +1978,97 @@ bot.command('whoami', async (ctx) => {
         `💡 **ADMIN_USER_IDS 환경변수에 추가하세요:**\n` +
         `\`ADMIN_USER_IDS=${userId}\``, { parse_mode: 'Markdown' });
 });
+// =============================================================================
+// ADMIN COMMANDS - Dashboard, User Management, Credit Grant
+// =============================================================================
+/**
+ * Admin dashboard - show real-time statistics
+ * Usage: /admin or /admin dashboard [period]
+ */
+bot.command('admin', async (ctx) => {
+    try {
+        const ADMIN_USER_IDS = process.env.ADMIN_USER_IDS?.split(',').map(id => parseInt(id)) || [];
+        const userId = ctx.from?.id || 0;
+        if (!ADMIN_USER_IDS.includes(userId)) {
+            await ctx.reply('❌ 관리자 권한이 필요합니다.');
+            return;
+        }
+        const commandText = ctx.message?.text || '';
+        const args = commandText.split(' ').slice(1);
+        // Parse subcommand
+        const subcommand = args[0] || 'dashboard';
+        if (subcommand === 'dashboard' || !subcommand) {
+            // Get period from args (default: 24h)
+            const period = (args[1] === '7d' || args[1] === '30d') ? args[1] : '24h';
+            console.log(`📊 Admin dashboard requested for period: ${period}`);
+            const { getDashboardStats, formatDashboardMessage } = await Promise.resolve().then(() => __importStar(require('../../src/services/admin-dashboard')));
+            const stats = await getDashboardStats(period);
+            const message = formatDashboardMessage(stats);
+            await ctx.reply(message, { parse_mode: 'Markdown' });
+        }
+        else if (subcommand.startsWith('user:')) {
+            // /admin user:search <user_id>
+            const searchUserId = parseInt(args[1] || '0');
+            if (!searchUserId || isNaN(searchUserId)) {
+                await ctx.reply('❌ 올바른 User ID를 입력해주세요.\n\n사용법: `/admin user:search 123456789`', { parse_mode: 'Markdown' });
+                return;
+            }
+            console.log(`🔍 Admin searching for user: ${searchUserId}`);
+            const { getUserInfo, formatUserInfo } = await Promise.resolve().then(() => __importStar(require('../../src/services/admin-users')));
+            const userInfo = await getUserInfo(searchUserId);
+            if (!userInfo) {
+                await ctx.reply(`❌ User ID ${searchUserId}를 찾을 수 없습니다.`);
+                return;
+            }
+            const message = formatUserInfo(userInfo);
+            await ctx.reply(message, { parse_mode: 'Markdown' });
+        }
+        else if (subcommand.startsWith('credit:')) {
+            // /admin credit:grant <user_id> <amount> <reason>
+            const targetUserId = parseInt(args[1] || '0');
+            const amount = parseInt(args[2] || '0');
+            const reason = args.slice(3).join(' ') || '관리자 지급';
+            if (!targetUserId || isNaN(targetUserId)) {
+                await ctx.reply('❌ 올바른 User ID를 입력해주세요.\n\n사용법: `/admin credit:grant 123456789 10 보상`', { parse_mode: 'Markdown' });
+                return;
+            }
+            if (!amount || isNaN(amount) || amount <= 0) {
+                await ctx.reply('❌ 올바른 크레딧 수량을 입력해주세요. (1 이상)', { parse_mode: 'Markdown' });
+                return;
+            }
+            console.log(`💳 Admin granting ${amount} credits to user ${targetUserId}: ${reason}`);
+            const { grantCredits, notifyUserCreditGrant, formatCreditGrantMessage } = await Promise.resolve().then(() => __importStar(require('../../src/services/admin-credits')));
+            const result = await grantCredits({
+                userId: targetUserId,
+                amount,
+                reason,
+                grantedBy: userId
+            });
+            // Get username for message
+            const { getUserInfo } = await Promise.resolve().then(() => __importStar(require('../../src/services/admin-users')));
+            const targetUser = await getUserInfo(targetUserId);
+            const username = targetUser?.username;
+            const message = formatCreditGrantMessage(result, username);
+            await ctx.reply(message, { parse_mode: 'Markdown' });
+            // Send DM to user
+            if (result.success) {
+                await notifyUserCreditGrant(bot, targetUserId, amount, reason);
+            }
+        }
+        else {
+            // Unknown subcommand
+            await ctx.reply(`❌ 알 수 없는 관리자 명령어입니다.\n\n` +
+                `**사용 가능한 명령어:**\n` +
+                `• \`/admin\` 또는 \`/admin dashboard [24h|7d|30d]\` - 대시보드\n` +
+                `• \`/admin user:search <user_id>\` - 사용자 검색\n` +
+                `• \`/admin credit:grant <user_id> <amount> <reason>\` - 크레딧 지급`, { parse_mode: 'Markdown' });
+        }
+    }
+    catch (error) {
+        console.error('❌ Error in admin command:', error);
+        await ctx.reply(`❌ 관리자 명령 실행 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+});
 // Terms of Service command (required for Telegram Stars)
 bot.command('terms', async (ctx) => {
     console.log('📜 Terms command received');
