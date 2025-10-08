@@ -867,17 +867,53 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
         // Send processing message
         const processingMsg = await ctx.reply(`✨ **${template.template_name_ko}** 스타일로 편집 중...\n\n` +
             `🎨 AI가 작업 중입니다. 잠시만 기다려주세요...`);
-        // TODO: Next step - Execute image editing with template
         console.log('📋 Template details:', {
             name: template.template_name_ko,
             category: template.category,
             prompt: template.base_prompt.substring(0, 100) + '...'
         });
-        // Placeholder - will implement actual editing in next step
-        await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `⏳ **편집 준비 중...**\n\n` +
-            `📝 템플릿: ${template.template_name_ko}\n` +
-            `📸 원본 이미지: ${imageUrl.substring(0, 50)}...\n\n` +
-            `🚧 이미지 편집 실행 기능은 다음 단계에서 구현됩니다.`);
+        // Execute image editing with Replicate
+        const { editImageWithReplicate } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-edit-service')));
+        const editResult = await editImageWithReplicate({
+            imageUrl,
+            templatePrompt: template.base_prompt,
+            templateName: template.template_name_ko,
+            category: template.category
+        });
+        if (editResult.success && editResult.outputUrl) {
+            // Update processing message
+            await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ **편집 완료!**\n\n` +
+                `🎨 스타일: ${template.template_name_ko}\n` +
+                `⏱️ 처리 시간: ${Math.round(editResult.processingTime / 1000)}초\n\n` +
+                `결과를 전송합니다...`);
+            // Send edited image
+            await ctx.replyWithPhoto(editResult.outputUrl, {
+                caption: `✨ **${template.template_name_ko}** 스타일 편집 완료!\n\n` +
+                    `📝 프롬프트: ${template.base_prompt.substring(0, 100)}...\n` +
+                    `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요`
+            });
+            // Store edit result in database
+            await supabase_1.supabase
+                .from('image_edit_results')
+                .insert({
+                user_id: ctx.from?.id,
+                chat_id: ctx.chat?.id,
+                template_key: template.template_key,
+                original_image_url: imageUrl,
+                edited_image_url: editResult.outputUrl,
+                processing_time_ms: editResult.processingTime,
+                status: 'completed'
+            });
+            console.log('✅ Edit result stored in database');
+        }
+        else {
+            // Handle error
+            const errorMsg = editResult.error || 'Unknown error';
+            await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `❌ **편집 실패**\n\n` +
+                `오류: ${errorMsg}\n\n` +
+                `💡 다른 스타일을 시도하거나 나중에 다시 시도해주세요.`);
+            console.error('❌ Edit failed:', errorMsg);
+        }
     }
     catch (error) {
         console.error('❌ Error in template callback:', error);
