@@ -52,6 +52,14 @@ import {
   getOutOfCreditsMessage,
   getWelcomeMessage
 } from '../../src/services/purchase-ui-service';
+import {
+  createCreditPackageInvoice,
+  createSubscriptionInvoice,
+  validatePayment,
+  parsePaymentPayload,
+  getPaymentSuccessMessage
+} from '../../src/services/telegram-stars-payment';
+import { addCredits } from '../../src/services/credit-manager';
 
 // Environment variables - support both Netlify and Render naming
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
@@ -3782,6 +3790,277 @@ ${helpMessage}
 
 // Register image editing handlers
 registerImageEditHandlers(bot);
+
+// =============================================================================
+// TELEGRAM STARS PAYMENT HANDLERS
+// =============================================================================
+
+/**
+ * Handle "buy credits" button click
+ */
+bot.callbackQuery(/^buy_credits:(.+)$/, async (ctx) => {
+  try {
+    const packageKey = ctx.match[1];
+    await ctx.answerCallbackQuery('결제 페이지를 생성하는 중...');
+
+    console.log(`💳 Creating invoice for package: ${packageKey}`);
+
+    const success = await createCreditPackageInvoice(ctx, packageKey);
+
+    if (!success) {
+      console.error('❌ Failed to create invoice');
+    }
+
+  } catch (error) {
+    console.error('❌ Error in buy_credits handler:', error);
+    await ctx.reply('❌ 결제 페이지 생성 중 오류가 발생했습니다.');
+  }
+});
+
+/**
+ * Handle "subscribe" button click
+ */
+bot.callbackQuery(/^subscribe:(.+)$/, async (ctx) => {
+  try {
+    const planKey = ctx.match[1];
+    await ctx.answerCallbackQuery('구독 결제 페이지를 생성하는 중...');
+
+    console.log(`💳 Creating subscription invoice for plan: ${planKey}`);
+
+    const success = await createSubscriptionInvoice(ctx, planKey);
+
+    if (!success) {
+      console.error('❌ Failed to create subscription invoice');
+    }
+
+  } catch (error) {
+    console.error('❌ Error in subscribe handler:', error);
+    await ctx.reply('❌ 구독 결제 페이지 생성 중 오류가 발생했습니다.');
+  }
+});
+
+/**
+ * Handle "show subscriptions" button click
+ */
+bot.callbackQuery('show_subscriptions', async (ctx) => {
+  try {
+    await ctx.answerCallbackQuery();
+
+    const { getSubscriptionPlansKeyboard, getSubscriptionOptionsMessage } = await import('../../src/services/purchase-ui-service');
+
+    const keyboard = await getSubscriptionPlansKeyboard();
+    const message = await getSubscriptionOptionsMessage();
+
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+
+  } catch (error) {
+    console.error('❌ Error showing subscriptions:', error);
+    await ctx.reply('❌ 구독 플랜을 불러오는 중 오류가 발생했습니다.');
+  }
+});
+
+/**
+ * Handle "show packages" button click
+ */
+bot.callbackQuery('show_packages', async (ctx) => {
+  try {
+    await ctx.answerCallbackQuery();
+
+    const keyboard = await getCreditPackagesKeyboard();
+    const message = await getPurchaseOptionsMessage();
+
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+
+  } catch (error) {
+    console.error('❌ Error showing packages:', error);
+    await ctx.reply('❌ 크레딧 패키지를 불러오는 중 오류가 발생했습니다.');
+  }
+});
+
+/**
+ * Handle "cancel purchase" button click
+ */
+bot.callbackQuery('cancel_purchase', async (ctx) => {
+  try {
+    await ctx.answerCallbackQuery('취소되었습니다');
+    await ctx.deleteMessage();
+  } catch (error) {
+    console.error('❌ Error canceling purchase:', error);
+  }
+});
+
+/**
+ * Handle pre-checkout query
+ * This is called before the payment is confirmed
+ */
+bot.on('pre_checkout_query', async (ctx) => {
+  try {
+    console.log('💳 Pre-checkout query received');
+    console.log('Payload:', ctx.preCheckoutQuery?.invoice_payload);
+    console.log('Total amount:', ctx.preCheckoutQuery?.total_amount);
+
+    const payload = ctx.preCheckoutQuery!.invoice_payload;
+    const totalAmount = ctx.preCheckoutQuery!.total_amount;
+
+    // Validate payment
+    const validation = await validatePayment(payload, totalAmount);
+
+    if (validation.valid) {
+      // Approve payment
+      await ctx.answerPreCheckoutQuery(true);
+      console.log('✅ Payment approved');
+    } else {
+      // Reject payment
+      await ctx.answerPreCheckoutQuery(false, validation.error);
+      console.log('❌ Payment rejected:', validation.error);
+    }
+
+  } catch (error) {
+    console.error('❌ Error in pre-checkout handler:', error);
+    await ctx.answerPreCheckoutQuery(false, '결제 처리 중 오류가 발생했습니다.');
+  }
+});
+
+/**
+ * Handle successful payment
+ * This is called after the payment is completed
+ */
+bot.on('message:successful_payment', async (ctx) => {
+  try {
+    console.log('💰 Successful payment received!');
+
+    const payment = ctx.message?.successful_payment;
+    if (!payment) {
+      console.error('❌ No payment data');
+      return;
+    }
+
+    console.log('Payment details:', {
+      currency: payment.currency,
+      total_amount: payment.total_amount,
+      invoice_payload: payment.invoice_payload,
+      telegram_payment_charge_id: payment.telegram_payment_charge_id
+    });
+
+    const payloadData = parsePaymentPayload(payment.invoice_payload);
+
+    if (!payloadData) {
+      await ctx.reply('❌ 결제 정보를 처리할 수 없습니다. 관리자에게 문의해주세요.');
+      return;
+    }
+
+    const userId = ctx.from!.id;
+
+    if (payloadData.type === 'credit_package') {
+      // Handle credit package purchase
+      const { getPackageByKey } = await import('../../src/services/credit-manager');
+      const pkg = await getPackageByKey(payloadData.package_key!);
+
+      if (!pkg) {
+        await ctx.reply('❌ 패키지 정보를 찾을 수 없습니다.');
+        return;
+      }
+
+      // Add credits to user account
+      const totalCredits = pkg.credits + pkg.bonus_credits;
+      const result = await addCredits(
+        userId,
+        totalCredits,
+        'paid',
+        `Purchase: ${pkg.package_name_ko}`,
+        pkg.package_key
+      );
+
+      if (result.success) {
+        await ctx.reply(getPaymentSuccessMessage(
+          'credit_package',
+          pkg.package_name_ko,
+          totalCredits
+        ));
+
+        console.log(`✅ Credits added: ${totalCredits} to user ${userId}`);
+
+        // Log transaction in database
+        await supabase
+          .from('credit_transactions')
+          .insert({
+            user_id: userId,
+            transaction_type: 'purchase',
+            credit_type: 'paid',
+            amount: totalCredits,
+            balance_after: result.new_balance,
+            description: `Telegram Stars: ${pkg.package_name_ko}`,
+            payment_provider: 'telegram_stars',
+            payment_id: payment.telegram_payment_charge_id,
+            package_key: pkg.package_key
+          });
+
+      } else {
+        await ctx.reply('❌ 크레딧 충전 중 오류가 발생했습니다. 관리자에게 문의해주세요.');
+        console.error('❌ Failed to add credits:', result.message);
+      }
+
+    } else if (payloadData.type === 'subscription') {
+      // Handle subscription purchase
+      const { getPlanByKey } = await import('../../src/services/credit-manager');
+      const plan = await getPlanByKey(payloadData.plan_key!);
+
+      if (!plan) {
+        await ctx.reply('❌ 구독 플랜 정보를 찾을 수 없습니다.');
+        return;
+      }
+
+      // Update subscription status
+      const now = new Date();
+      const endDate = new Date(now);
+      endDate.setMonth(endDate.getMonth() + 1); // 1 month subscription
+
+      await supabase
+        .from('user_credits')
+        .update({
+          subscription_type: plan.plan_key,
+          subscription_status: 'active',
+          subscription_start_date: now.toISOString(),
+          subscription_end_date: endDate.toISOString(),
+          subscription_telegram_id: payment.telegram_payment_charge_id,
+          subscription_credits: plan.credits_per_month
+        })
+        .eq('user_id', userId);
+
+      await ctx.reply(getPaymentSuccessMessage(
+        'subscription',
+        plan.plan_name_ko,
+        plan.credits_per_month
+      ));
+
+      console.log(`✅ Subscription activated: ${plan.plan_key} for user ${userId}`);
+
+      // Log transaction
+      await supabase
+        .from('credit_transactions')
+        .insert({
+          user_id: userId,
+          transaction_type: 'purchase',
+          credit_type: 'paid',
+          amount: plan.credits_per_month,
+          description: `Subscription: ${plan.plan_name_ko}`,
+          payment_provider: 'telegram_stars',
+          payment_id: payment.telegram_payment_charge_id,
+          package_key: plan.plan_key
+        });
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling successful payment:', error);
+    await ctx.reply('❌ 결제 처리 중 오류가 발생했습니다. 관리자에게 문의해주세요.');
+  }
+});
 
 // Debug middleware - log ALL messages
 bot.use(async (ctx, next) => {
