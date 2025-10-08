@@ -108,9 +108,13 @@ async function storeUploadSession(
   analysis: ImageAnalysisResult
 ): Promise<boolean> {
   try {
+    // Generate a session ID (UUID)
+    const sessionId = crypto.randomUUID();
+
     const { data, error } = await supabase
       .from('image_analysis_results')
       .insert({
+        session_id: sessionId,
         user_id: ctx.from?.id,
         chat_id: ctx.chat?.id,
         message_id: ctx.message?.message_id,

@@ -79,9 +79,12 @@ async function handlePhotoUpload(ctx) {
  */
 async function storeUploadSession(ctx, fileId, imageUrl, fileSize, analysis) {
     try {
+        // Generate a session ID (UUID)
+        const sessionId = crypto.randomUUID();
         const { data, error } = await supabase_1.supabase
             .from('image_analysis_results')
             .insert({
+            session_id: sessionId,
             user_id: ctx.from?.id,
             chat_id: ctx.chat?.id,
             message_id: ctx.message?.message_id,

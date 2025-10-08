@@ -898,18 +898,21 @@ bot.on('message:photo', async (ctx) => {
 
       message += `\n💡 **아래 버튼을 눌러 스타일을 선택하세요:**\n`;
 
+      // Store file ID in cache with short key
+      const fileKey = storeFileId(ctx.chat!.id, ctx.message!.message_id, uploadResult.fileId!);
+
       // Create inline keyboard with template buttons
       const keyboard = new InlineKeyboard();
 
       uploadResult.recommendations.slice(0, 4).forEach(rec => {
         keyboard.text(
           `${rec.emoji} ${rec.nameKo}`,
-          `template:${rec.templateKey}:${uploadResult.fileId}`
+          `t:${rec.templateKey}:${fileKey}`
         ).row();
       });
 
       // Add "View All" button
-      keyboard.text('🔍 전체 38개 스타일 보기', `template:view_all:${uploadResult.fileId}`);
+      keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
 
       await ctx.reply(message, {
         parse_mode: 'Markdown',
@@ -939,11 +942,32 @@ bot.on('message:photo', async (ctx) => {
 // CALLBACK QUERY HANDLERS (Inline Buttons)
 // =============================================================================
 
+// In-memory storage for file IDs (session-based)
+const fileIdCache = new Map<string, string>();
+
+function storeFileId(chatId: number, messageId: number, fileId: string): string {
+  const key = `${chatId}:${messageId}`;
+  fileIdCache.set(key, fileId);
+  return key;
+}
+
+function getFileId(key: string): string | undefined {
+  return fileIdCache.get(key);
+}
+
 // Template selection callback handler
-bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
+bot.callbackQuery(/^t:(.+):(.+)$/, async (ctx) => {
   try {
     const templateKey = ctx.match[1];
-    const fileId = ctx.match[2];
+    const fileKey = ctx.match[2];
+
+    // Get actual file ID from cache
+    const fileId = getFileId(fileKey);
+
+    if (!fileId) {
+      await ctx.answerCallbackQuery('세션이 만료되었습니다. 사진을 다시 업로드해주세요.');
+      return;
+    }
 
     console.log(`🎨 Template selected: ${templateKey} for file: ${fileId}`);
 
@@ -951,7 +975,7 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
 
     // Handle "View All" button
-    if (templateKey === 'view_all') {
+    if (templateKey === 'all') {
       // Fetch all templates from database
       const { data: allTemplates, error } = await supabase
         .from('prompt_templates')
@@ -973,13 +997,13 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
         const emoji = getCategoryEmoji(template.category);
         keyboard.text(
           `${emoji} ${template.template_name_ko}`,
-          `template:${template.template_key}:${fileId}`
+          `t:${template.template_key}:${fileKey}`
         ).row();
       });
 
       // Add pagination if more than 8 templates
       if (allTemplates.length > templatesPerPage) {
-        keyboard.text('➡️ 다음 페이지', `template_page:1:${fileId}`);
+        keyboard.text('➡️ 다음 페이지', `tp:1:${fileKey}`);
       }
 
       await ctx.reply('🎨 **전체 스타일 목록:**\n\n원하는 스타일을 선택하세요:', {
@@ -1044,10 +1068,10 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
 
       // Create action buttons for the edited image
       const actionKeyboard = new InlineKeyboard()
-        .text('🔄 다른 스타일 시도', `retry_edit:${fileId}`)
-        .text('💾 원본으로 돌아가기', `back_to_original:${fileId}`).row()
-        .text('🎨 다시 편집', `re_edit:${template.template_key}:${fileId}`)
-        .text('⭐ 이 스타일 평가', `rate_style:${template.template_key}`);
+        .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
+        .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
+        .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
+        .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
 
       // Send edited image with action buttons
       await ctx.replyWithPhoto(editResult.outputUrl, {
@@ -1102,9 +1126,16 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
 // Action button handlers for edited images
 
 // Retry edit with different style
-bot.callbackQuery(/^retry_edit:(.+)$/, async (ctx) => {
+bot.callbackQuery(/^retry:(.+)$/, async (ctx) => {
   try {
-    const fileId = ctx.match[1];
+    const fileKey = ctx.match[1];
+    const fileId = getFileId(fileKey);
+
+    if (!fileId) {
+      await ctx.answerCallbackQuery('세션이 만료되었습니다.');
+      return;
+    }
+
     await ctx.answerCallbackQuery();
 
     // Get file and analysis
@@ -1131,11 +1162,11 @@ bot.callbackQuery(/^retry_edit:(.+)$/, async (ctx) => {
       message += `${rec.emoji} ${rec.nameKo} (${rec.confidence}%)\n`;
       keyboard.text(
         `${rec.emoji} ${rec.nameKo}`,
-        `template:${rec.templateKey}:${fileId}`
+        `t:${rec.templateKey}:${fileKey}`
       ).row();
     });
 
-    keyboard.text('🔍 전체 38개 스타일 보기', `template:view_all:${fileId}`);
+    keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
 
     await ctx.reply(message, { reply_markup: keyboard });
 
@@ -1146,9 +1177,16 @@ bot.callbackQuery(/^retry_edit:(.+)$/, async (ctx) => {
 });
 
 // Back to original image
-bot.callbackQuery(/^back_to_original:(.+)$/, async (ctx) => {
+bot.callbackQuery(/^back:(.+)$/, async (ctx) => {
   try {
-    const fileId = ctx.match[1];
+    const fileKey = ctx.match[1];
+    const fileId = getFileId(fileKey);
+
+    if (!fileId) {
+      await ctx.answerCallbackQuery('세션이 만료되었습니다.');
+      return;
+    }
+
     await ctx.answerCallbackQuery('원본 이미지를 다시 전송합니다...');
 
     const file = await ctx.api.getFile(fileId);
@@ -1170,10 +1208,17 @@ bot.callbackQuery(/^back_to_original:(.+)$/, async (ctx) => {
 });
 
 // Re-edit with same style
-bot.callbackQuery(/^re_edit:(.+):(.+)$/, async (ctx) => {
+bot.callbackQuery(/^redo:(.+):(.+)$/, async (ctx) => {
   try {
     const templateKey = ctx.match[1];
-    const fileId = ctx.match[2];
+    const fileKey = ctx.match[2];
+
+    const fileId = getFileId(fileKey);
+
+    if (!fileId) {
+      await ctx.answerCallbackQuery('세션이 만료되었습니다.');
+      return;
+    }
 
     await ctx.answerCallbackQuery('같은 스타일로 다시 편집합니다...');
 
@@ -1221,10 +1266,10 @@ bot.callbackQuery(/^re_edit:(.+):(.+)$/, async (ctx) => {
       );
 
       const actionKeyboard = new InlineKeyboard()
-        .text('🔄 다른 스타일 시도', `retry_edit:${fileId}`)
-        .text('💾 원본으로 돌아가기', `back_to_original:${fileId}`).row()
-        .text('🎨 다시 편집', `re_edit:${template.template_key}:${fileId}`)
-        .text('⭐ 이 스타일 평가', `rate_style:${template.template_key}`);
+        .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
+        .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
+        .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
+        .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
 
       await ctx.replyWithPhoto(editResult.outputUrl, {
         caption: `✨ **${template.template_name_ko}** 재편집 완료!`,
@@ -1245,17 +1290,17 @@ bot.callbackQuery(/^re_edit:(.+):(.+)$/, async (ctx) => {
 });
 
 // Rate style
-bot.callbackQuery(/^rate_style:(.+)$/, async (ctx) => {
+bot.callbackQuery(/^rate:(.+)$/, async (ctx) => {
   try {
     const templateKey = ctx.match[1];
     await ctx.answerCallbackQuery();
 
     const ratingKeyboard = new InlineKeyboard()
-      .text('⭐ 1점', `submit_rating:${templateKey}:1`)
-      .text('⭐⭐ 2점', `submit_rating:${templateKey}:2`)
-      .text('⭐⭐⭐ 3점', `submit_rating:${templateKey}:3`).row()
-      .text('⭐⭐⭐⭐ 4점', `submit_rating:${templateKey}:4`)
-      .text('⭐⭐⭐⭐⭐ 5점', `submit_rating:${templateKey}:5`);
+      .text('⭐ 1점', `rating:${templateKey}:1`)
+      .text('⭐⭐ 2점', `rating:${templateKey}:2`)
+      .text('⭐⭐⭐ 3점', `rating:${templateKey}:3`).row()
+      .text('⭐⭐⭐⭐ 4점', `rating:${templateKey}:4`)
+      .text('⭐⭐⭐⭐⭐ 5점', `rating:${templateKey}:5`);
 
     await ctx.reply('⭐ **이 스타일을 평가해주세요:**\n\n별점을 선택하세요:', {
       reply_markup: ratingKeyboard
@@ -1268,7 +1313,7 @@ bot.callbackQuery(/^rate_style:(.+)$/, async (ctx) => {
 });
 
 // Submit rating
-bot.callbackQuery(/^submit_rating:(.+):(\d+)$/, async (ctx) => {
+bot.callbackQuery(/^rating:(.+):(\d+)$/, async (ctx) => {
   try {
     const templateKey = ctx.match[1];
     const rating = parseInt(ctx.match[2]);
