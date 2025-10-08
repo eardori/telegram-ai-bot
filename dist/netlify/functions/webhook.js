@@ -63,6 +63,9 @@ const image_edit_service_1 = require("../../src/services/image-edit-service");
 const replicate_service_1 = require("../../src/services/replicate-service");
 // Import Supabase
 const supabase_1 = require("../../src/utils/supabase");
+// Import credit system
+const image_edit_credit_wrapper_1 = require("../../src/services/image-edit-credit-wrapper");
+const purchase_ui_service_1 = require("../../src/services/purchase-ui-service");
 // Environment variables - support both Netlify and Render naming
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
@@ -935,6 +938,24 @@ bot.callbackQuery(/^ai:(\d+):(.+):(.+)$/, async (ctx) => {
         const file = await ctx.api.getFile(fileId);
         const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
         const imageUrl = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+        // ========== CREDIT CHECK ==========
+        const creditCheck = await (0, image_edit_credit_wrapper_1.checkCreditsBeforeEdit)(ctx, `ai_${suggestionIndex}`);
+        if (!creditCheck.canProceed) {
+            if (creditCheck.message) {
+                await ctx.reply(creditCheck.message);
+            }
+            if (creditCheck.shouldShowPurchaseOptions) {
+                const keyboard = await (0, purchase_ui_service_1.getCreditPackagesKeyboard)();
+                const message = await (0, purchase_ui_service_1.getPurchaseOptionsMessage)();
+                await ctx.reply(message, { reply_markup: keyboard });
+            }
+            await ctx.answerCallbackQuery('크레딧이 부족합니다');
+            return;
+        }
+        // Show welcome message for new users
+        if (creditCheck.message && creditCheck.isRegistered) {
+            await ctx.reply(creditCheck.message);
+        }
         // Send processing message
         const processingMsg = await ctx.reply(`🎨 **AI 추천으로 편집 중...**\n\n✨ ${suggestion.title}\n${suggestion.description}\n\n⏳ 잠시만 기다려주세요...`);
         // Edit image using AI suggestion prompt
@@ -948,12 +969,29 @@ bot.callbackQuery(/^ai:(\d+):(.+):(.+)$/, async (ctx) => {
             templateKey: `ai_${suggestionIndex}`
         });
         if (editResult.success && editResult.outputFile) {
+            // ========== DEDUCT CREDIT ==========
+            const deductResult = await (0, image_edit_credit_wrapper_1.deductCreditAfterEdit)(ctx, `ai_${suggestionIndex}`, undefined, creditCheck.isFreeTrial);
+            if (!deductResult.success) {
+                console.error('❌ Failed to deduct credit:', deductResult.message);
+            }
             // Delete processing message
             await ctx.api.deleteMessage(ctx.chat.id, processingMsg.message_id);
+            // Build caption with credit info
+            let caption = `✨ **AI 추천: ${suggestion.title}**\n\n${suggestion.description}\n\n⏱️ 처리 시간: ${(editResult.processingTime / 1000).toFixed(1)}초`;
+            // Add credit info for private chat or free trial
+            if (creditCheck.isFreeTrial) {
+                caption += `\n\n${deductResult.message}`;
+            }
+            else if (ctx.chat?.type === 'private') {
+                caption += `\n\n💳 남은 크레딧: ${deductResult.remainingCredits}회`;
+            }
             // Send edited image
-            await ctx.replyWithPhoto(editResult.outputFile, {
-                caption: `✨ **AI 추천: ${suggestion.title}**\n\n${suggestion.description}\n\n⏱️ 처리 시간: ${(editResult.processingTime / 1000).toFixed(1)}초`
-            });
+            await ctx.replyWithPhoto(editResult.outputFile, { caption });
+            // Send DM notification for group chat (non-free-trial users)
+            const isGroupChat = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+            if (isGroupChat && !creditCheck.isFreeTrial) {
+                await (0, image_edit_credit_wrapper_1.notifyCreditDeduction)(ctx, deductResult.remainingCredits, true);
+            }
             console.log(`✅ AI suggestion edit completed in ${editResult.processingTime}ms`);
         }
         else {
@@ -1103,6 +1141,24 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
             return;
         }
         const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        // ========== CREDIT CHECK ==========
+        const creditCheck = await (0, image_edit_credit_wrapper_1.checkCreditsBeforeEdit)(ctx, templateKey);
+        if (!creditCheck.canProceed) {
+            if (creditCheck.message) {
+                await ctx.reply(creditCheck.message);
+            }
+            if (creditCheck.shouldShowPurchaseOptions) {
+                const keyboard = await (0, purchase_ui_service_1.getCreditPackagesKeyboard)();
+                const message = await (0, purchase_ui_service_1.getPurchaseOptionsMessage)();
+                await ctx.reply(message, { reply_markup: keyboard });
+            }
+            await ctx.answerCallbackQuery('크레딧이 부족합니다');
+            return;
+        }
+        // Show welcome message for new users
+        if (creditCheck.message && creditCheck.isRegistered) {
+            await ctx.reply(creditCheck.message);
+        }
         // Send processing message
         const processingMsg = await ctx.reply(`✨ **${template.template_name_ko}** 스타일로 편집 중...\n\n` +
             `🎨 AI가 작업 중입니다. 잠시만 기다려주세요...`);
@@ -1134,6 +1190,11 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
             return;
         }
         if (editResult.success && (editResult.outputUrl || editResult.outputFile)) {
+            // ========== DEDUCT CREDIT ==========
+            const deductResult = await (0, image_edit_credit_wrapper_1.deductCreditAfterEdit)(ctx, templateKey, undefined, creditCheck.isFreeTrial);
+            if (!deductResult.success) {
+                console.error('❌ Failed to deduct credit:', deductResult.message);
+            }
             // Update processing message
             await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ **편집 완료!**\n\n` +
                 `🎨 스타일: ${template.template_name_ko}\n` +
@@ -1145,18 +1206,32 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
                 .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
                 .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
+            // Build caption with credit info
+            let caption = `✨ **${template.template_name_ko}** 스타일 편집 완료!\n\n` +
+                `📝 프롬프트: ${template.base_prompt.substring(0, 100)}...\n` +
+                `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요`;
+            // Add credit info for private chat or free trial
+            if (creditCheck.isFreeTrial) {
+                caption += `\n\n${deductResult.message}`;
+            }
+            else if (ctx.chat?.type === 'private') {
+                caption += `\n\n💳 남은 크레딧: ${deductResult.remainingCredits}회`;
+            }
+            caption += `\n\n💡 **다음 액션:**\n` +
+                `• 🔄 다른 스타일로 시도해보세요\n` +
+                `• 💾 원본 이미지로 돌아갈 수 있습니다\n` +
+                `• 🎨 같은 스타일로 다시 편집할 수 있습니다`;
             // Send edited image with action buttons
             const photoSource = editResult.outputFile || editResult.outputUrl;
             await ctx.replyWithPhoto(photoSource, {
-                caption: `✨ **${template.template_name_ko}** 스타일 편집 완료!\n\n` +
-                    `📝 프롬프트: ${template.base_prompt.substring(0, 100)}...\n` +
-                    `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요\n\n` +
-                    `💡 **다음 액션:**\n` +
-                    `• 🔄 다른 스타일로 시도해보세요\n` +
-                    `• 💾 원본 이미지로 돌아갈 수 있습니다\n` +
-                    `• 🎨 같은 스타일로 다시 편집할 수 있습니다`,
+                caption,
                 reply_markup: actionKeyboard
             });
+            // Send DM notification for group chat (non-free-trial users)
+            const isGroupChat = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+            if (isGroupChat && !creditCheck.isFreeTrial) {
+                await (0, image_edit_credit_wrapper_1.notifyCreditDeduction)(ctx, deductResult.remainingCredits, true);
+            }
             // Store edit result in database (only if URL is available)
             const editedImageUrl = editResult.outputUrl || '(direct_file)';
             const { data: editRecord } = await supabase_1.supabase
@@ -1266,6 +1341,24 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
             fragment: option.prompt_fragment.substring(0, 50) + '...',
             finalPrompt: finalPrompt.substring(0, 100) + '...'
         });
+        // ========== CREDIT CHECK ==========
+        const creditCheck = await (0, image_edit_credit_wrapper_1.checkCreditsBeforeEdit)(ctx, templateKey);
+        if (!creditCheck.canProceed) {
+            if (creditCheck.message) {
+                await ctx.reply(creditCheck.message);
+            }
+            if (creditCheck.shouldShowPurchaseOptions) {
+                const keyboard = await (0, purchase_ui_service_1.getCreditPackagesKeyboard)();
+                const message = await (0, purchase_ui_service_1.getPurchaseOptionsMessage)();
+                await ctx.reply(message, { reply_markup: keyboard });
+            }
+            await ctx.answerCallbackQuery('크레딧이 부족합니다');
+            return;
+        }
+        // Show welcome message for new users
+        if (creditCheck.message && creditCheck.isRegistered) {
+            await ctx.reply(creditCheck.message);
+        }
         // Send processing message
         const processingMsg = await ctx.reply(`✨ **${templateWithParams.template_name_ko}** 편집 중...\n\n` +
             `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n\n` +
@@ -1293,6 +1386,11 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
             return;
         }
         if (editResult.success && (editResult.outputUrl || editResult.outputFile)) {
+            // ========== DEDUCT CREDIT ==========
+            const deductResult = await (0, image_edit_credit_wrapper_1.deductCreditAfterEdit)(ctx, templateKey, undefined, creditCheck.isFreeTrial);
+            if (!deductResult.success) {
+                console.error('❌ Failed to deduct credit:', deductResult.message);
+            }
             // Update processing message
             await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ **편집 완료!**\n\n` +
                 `🎨 스타일: ${templateWithParams.template_name_ko}\n` +
@@ -1305,18 +1403,32 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
                 .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
                 .text('🎨 다른 스타일', `retry:${fileKey}`)
                 .text('⭐ 이 스타일 평가', `rate:${templateKey}`);
+            // Build caption with credit info
+            let caption = `✨ **${templateWithParams.template_name_ko}** 편집 완료!\n\n` +
+                `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n` +
+                `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요`;
+            // Add credit info for private chat or free trial
+            if (creditCheck.isFreeTrial) {
+                caption += `\n\n${deductResult.message}`;
+            }
+            else if (ctx.chat?.type === 'private') {
+                caption += `\n\n💳 남은 크레딧: ${deductResult.remainingCredits}회`;
+            }
+            caption += `\n\n💡 **다음 액션:**\n` +
+                `• 🔄 다른 옵션으로 시도해보세요\n` +
+                `• 🎨 완전히 다른 스타일로 변경하세요\n` +
+                `• 💾 원본 이미지로 돌아갈 수 있습니다`;
             // Send edited image with action buttons
             const photoSource = editResult.outputFile || editResult.outputUrl;
             await ctx.replyWithPhoto(photoSource, {
-                caption: `✨ **${templateWithParams.template_name_ko}** 편집 완료!\n\n` +
-                    `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n` +
-                    `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요\n\n` +
-                    `💡 **다음 액션:**\n` +
-                    `• 🔄 다른 옵션으로 시도해보세요\n` +
-                    `• 🎨 완전히 다른 스타일로 변경하세요\n` +
-                    `• 💾 원본 이미지로 돌아갈 수 있습니다`,
+                caption,
                 reply_markup: actionKeyboard
             });
+            // Send DM notification for group chat (non-free-trial users)
+            const isGroupChat = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+            if (isGroupChat && !creditCheck.isFreeTrial) {
+                await (0, image_edit_credit_wrapper_1.notifyCreditDeduction)(ctx, deductResult.remainingCredits, true);
+            }
             // Store edit result in database (only if URL is available)
             if (editResult.outputUrl) {
                 const { error: insertError } = await supabase_1.supabase
@@ -1484,6 +1596,24 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
             return;
         }
         const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        // ========== CREDIT CHECK ==========
+        const creditCheck = await (0, image_edit_credit_wrapper_1.checkCreditsBeforeEdit)(ctx, templateKey);
+        if (!creditCheck.canProceed) {
+            if (creditCheck.message) {
+                await ctx.reply(creditCheck.message);
+            }
+            if (creditCheck.shouldShowPurchaseOptions) {
+                const keyboard = await (0, purchase_ui_service_1.getCreditPackagesKeyboard)();
+                const message = await (0, purchase_ui_service_1.getPurchaseOptionsMessage)();
+                await ctx.reply(message, { reply_markup: keyboard });
+            }
+            await ctx.answerCallbackQuery('크레딧이 부족합니다');
+            return;
+        }
+        // Show welcome message for new users
+        if (creditCheck.message && creditCheck.isRegistered) {
+            await ctx.reply(creditCheck.message);
+        }
         // Execute editing (same logic as template selection)
         const processingMsg = await ctx.reply(`🎨 **${template.template_name_ko}** 스타일로 다시 편집 중...\n\n` +
             `⚡ 잠시만 기다려주세요...`);
@@ -1498,17 +1628,36 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
             templateKey: templateKey
         });
         if (editResult.success && (editResult.outputUrl || editResult.outputFile)) {
+            // ========== DEDUCT CREDIT ==========
+            const deductResult = await (0, image_edit_credit_wrapper_1.deductCreditAfterEdit)(ctx, templateKey, undefined, creditCheck.isFreeTrial);
+            if (!deductResult.success) {
+                console.error('❌ Failed to deduct credit:', deductResult.message);
+            }
             await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ 편집 완료!`);
             const actionKeyboard = new grammy_1.InlineKeyboard()
                 .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
                 .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
                 .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
                 .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
+            // Build caption with credit info
+            let caption = `✨ **${template.template_name_ko}** 재편집 완료!`;
+            // Add credit info for private chat or free trial
+            if (creditCheck.isFreeTrial) {
+                caption += `\n\n${deductResult.message}`;
+            }
+            else if (ctx.chat?.type === 'private') {
+                caption += `\n\n💳 남은 크레딧: ${deductResult.remainingCredits}회`;
+            }
             const photoSource = editResult.outputFile || editResult.outputUrl;
             await ctx.replyWithPhoto(photoSource, {
-                caption: `✨ **${template.template_name_ko}** 재편집 완료!`,
+                caption,
                 reply_markup: actionKeyboard
             });
+            // Send DM notification for group chat (non-free-trial users)
+            const isGroupChat = ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+            if (isGroupChat && !creditCheck.isFreeTrial) {
+                await (0, image_edit_credit_wrapper_1.notifyCreditDeduction)(ctx, deductResult.remainingCredits, true);
+            }
         }
         else {
             await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `❌ 편집 실패: ${editResult.error}`);
