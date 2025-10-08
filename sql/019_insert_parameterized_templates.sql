@@ -1,31 +1,22 @@
 -- =============================================================================
--- INSERT PARAMETERIZED TEMPLATES
+-- UPGRADE EXISTING TEMPLATES TO PARAMETERIZED
 -- Version: 1.0.0
--- Description: Insert 3 initial parameterized templates with options
+-- Description: Upgrade 3 existing templates to parameterized with options
 -- =============================================================================
 
 -- =============================================================================
 -- TEMPLATE 1: 배경 변경 (Background Replace)
+-- Upgrade existing 'background_replace' template
 -- =============================================================================
 
-INSERT INTO prompt_templates (
-    template_key, template_name_ko, template_name_en, category, subcategory,
-    base_prompt, template_type,
-    min_images, max_images, requires_face, priority, is_active
-) VALUES (
-    'background_replace',
-    '🌍 배경 변경',
-    'Background Replace',
-    'image_editing',
-    'background',
-    'Replace the background of this photo with {background_style}. Keep the subject exactly as is, including pose, clothing, facial features, and the lighting on the subject. Seamlessly blend the subject into the new background with natural shadows and reflections. Maintain photorealistic quality.',
-    'parameterized',
-    1, 1, false, 90, true
-)
-ON CONFLICT (template_key) DO UPDATE SET
+UPDATE prompt_templates SET
+    template_name_ko = '🌍 배경 변경',
+    base_prompt = 'Replace the background of this photo with {background_style}. Keep the subject exactly as is, including pose, clothing, facial features, and the lighting on the subject. Seamlessly blend the subject into the new background with natural shadows and reflections. Maintain photorealistic quality.',
     template_type = 'parameterized',
-    base_prompt = EXCLUDED.base_prompt,
-    priority = EXCLUDED.priority;
+    min_images = 1,
+    max_images = 1,
+    priority = 90
+WHERE template_key = 'background_replace';
 
 -- Add parameter
 INSERT INTO template_parameters (
@@ -68,7 +59,8 @@ INSERT INTO template_parameter_options (
 ON CONFLICT (parameter_id, option_key) DO NOTHING;
 
 -- =============================================================================
--- TEMPLATE 2: 의상 변경 (Outfit Change)
+-- TEMPLATE 2: 의상 스타일링 (Outfit Styling) - NEW TEMPLATE
+-- Note: Different from 'outfit_swap' which swaps between 2 images
 -- =============================================================================
 
 INSERT INTO prompt_templates (
@@ -76,9 +68,9 @@ INSERT INTO prompt_templates (
     base_prompt, template_type,
     min_images, max_images, requires_face, min_faces, priority, is_active
 ) VALUES (
-    'outfit_change',
-    '👔 의상 변경',
-    'Outfit Change',
+    'outfit_styling',
+    '👗 의상 스타일링',
+    'Outfit Styling',
     'image_editing',
     'fashion',
     'Change the clothing of the person in this photo to {outfit_style}. Keep the face, pose, body proportions, and background exactly the same. Only change the clothing. Ensure the new outfit fits naturally on the body with proper folds, shadows, and realistic fabric texture.',
@@ -95,7 +87,7 @@ INSERT INTO template_parameters (
     template_key, parameter_key, parameter_name_ko, parameter_name_en,
     parameter_type, is_required, display_order
 ) VALUES (
-    'outfit_change', 'outfit_style', '의상 스타일', 'Outfit Style',
+    'outfit_styling', 'outfit_style', '의상 스타일', 'Outfit Style',
     'select', true, 1
 )
 ON CONFLICT (template_key, parameter_key) DO NOTHING;
@@ -105,53 +97,44 @@ INSERT INTO template_parameter_options (
     parameter_id, option_key, option_name_ko, option_name_en,
     prompt_fragment, emoji, display_order
 ) VALUES
-    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_change' AND parameter_key = 'outfit_style'),
+    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_styling' AND parameter_key = 'outfit_style'),
      'business_suit', '비즈니스 정장', 'Business Suit',
      'a professional business suit - black or navy blazer, crisp white dress shirt, silk tie, dress pants, and polished leather shoes', '💼', 1),
 
-    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_change' AND parameter_key = 'outfit_style'),
+    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_styling' AND parameter_key = 'outfit_style'),
      'casual_street', '캐주얼 스트릿', 'Casual Streetwear',
      'trendy streetwear - graphic t-shirt with cool design, relaxed fit jeans, stylish sneakers, and a baseball cap', '👕', 2),
 
-    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_change' AND parameter_key = 'outfit_style'),
+    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_styling' AND parameter_key = 'outfit_style'),
      'elegant_dress', '우아한 드레스', 'Elegant Dress',
      'an elegant evening dress - floor-length gown with flowing fabric, sophisticated design, elegant accessories, and dressy heels', '👗', 3),
 
-    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_change' AND parameter_key = 'outfit_style'),
+    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_styling' AND parameter_key = 'outfit_style'),
      'sportswear', '스포츠웨어', 'Sportswear',
      'athletic sportswear - moisture-wicking running shirt, performance shorts or leggings, sports brand logo, and athletic running shoes', '🏃', 4),
 
-    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_change' AND parameter_key = 'outfit_style'),
+    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_styling' AND parameter_key = 'outfit_style'),
      'traditional_hanbok', '한복', 'Traditional Hanbok',
      'traditional Korean hanbok with vibrant colors - jeogori (jacket), chima (skirt) or baji (pants), elegant embroidery, and traditional accessories', '🎎', 5),
 
-    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_change' AND parameter_key = 'outfit_style'),
+    ((SELECT id FROM template_parameters WHERE template_key = 'outfit_styling' AND parameter_key = 'outfit_style'),
      'superhero', '슈퍼히어로', 'Superhero Costume',
      'a superhero costume - form-fitting suit with emblematic design, cape flowing behind, mask or cowl, and superhero insignia', '🦸', 6)
 ON CONFLICT (parameter_id, option_key) DO NOTHING;
 
 -- =============================================================================
 -- TEMPLATE 3: 표정 변경 (Expression Change)
+-- Upgrade existing 'expression_change' template
 -- =============================================================================
 
-INSERT INTO prompt_templates (
-    template_key, template_name_ko, template_name_en, category, subcategory,
-    base_prompt, template_type,
-    min_images, max_images, requires_face, min_faces, priority, is_active
-) VALUES (
-    'expression_change',
-    '😊 표정 변경',
-    'Expression Change',
-    'image_editing',
-    'portrait',
-    'Change the facial expression of the person in this photo to {expression_type}. Keep everything else exactly the same - same pose, same clothing, same background, same lighting. Only modify the facial expression naturally and realistically.',
-    'parameterized',
-    1, 1, true, 1, 85, true
-)
-ON CONFLICT (template_key) DO UPDATE SET
+UPDATE prompt_templates SET
+    template_name_ko = '😊 표정 변경',
+    base_prompt = 'Change the facial expression of the person in this photo to {expression_type}. Keep everything else exactly the same - same pose, same clothing, same background, same lighting. Only modify the facial expression naturally and realistically.',
     template_type = 'parameterized',
-    base_prompt = EXCLUDED.base_prompt,
-    priority = EXCLUDED.priority;
+    min_images = 1,
+    max_images = 1,
+    priority = 85
+WHERE template_key = 'expression_change';
 
 -- Add parameter
 INSERT INTO template_parameters (
