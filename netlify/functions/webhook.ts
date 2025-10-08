@@ -911,7 +911,17 @@ bot.on('message:photo', async (ctx) => {
         ).row();
       });
 
+      // Add category buttons (2 rows of 3, then 1 row of 2)
+      keyboard.row();
+      keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`)
+        .text('📸 인물 스타일', `cat:portrait_styling:${fileKey}`)
+        .text('🎮 게임/애니', `cat:game_animation:${fileKey}`);
+      keyboard.row();
+      keyboard.text('🛠️ 이미지 편집', `cat:image_editing:${fileKey}`)
+        .text('✨ 창의적 변환', `cat:creative_transform:${fileKey}`);
+
       // Add "View All" button
+      keyboard.row();
       keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
 
       await ctx.reply(message, {
@@ -1420,6 +1430,79 @@ bot.callbackQuery(/^rating:(.+):(\d+)$/, async (ctx) => {
 
   } catch (error) {
     console.error('❌ Error in submit_rating:', error);
+  }
+});
+
+// Category selection handler
+bot.callbackQuery(/^cat:([^:]+):(.+):(.+)$/, async (ctx) => {
+  try {
+    const category = ctx.match[1];
+    const chatId = parseInt(ctx.match[2]);
+    const messageId = parseInt(ctx.match[3]);
+
+    await ctx.answerCallbackQuery();
+
+    // Get category name in Korean
+    const categoryNames: Record<string, string> = {
+      '3d_figurine': '🎭 3D/피규어',
+      'portrait_styling': '📸 인물 스타일',
+      'game_animation': '🎮 게임/애니메이션',
+      'image_editing': '🛠️ 이미지 편집',
+      'creative_transform': '✨ 창의적 변환'
+    };
+
+    const categoryName = categoryNames[category] || category;
+
+    // Fetch templates by category
+    const { data: templates, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('category', category)
+      .eq('is_active', true)
+      .order('priority', { ascending: false });
+
+    if (error || !templates || templates.length === 0) {
+      await ctx.reply(`❌ ${categoryName} 카테고리의 템플릿을 찾을 수 없습니다.`);
+      return;
+    }
+
+    // Create keyboard with category templates (6 per page, 2 rows of 3)
+    const fileKey = `${chatId}:${messageId}`;
+    const keyboard = new InlineKeyboard();
+    const templatesPerPage = 6;
+    const pageTemplates = templates.slice(0, templatesPerPage);
+
+    // Add template buttons (2 rows of 3)
+    for (let i = 0; i < pageTemplates.length; i += 3) {
+      const row = pageTemplates.slice(i, i + 3);
+      row.forEach(template => {
+        const emoji = getCategoryEmoji(template.category);
+        keyboard.text(
+          `${emoji} ${template.template_name_ko}`,
+          `t:${template.template_key}:${fileKey}`
+        );
+      });
+      keyboard.row();
+    }
+
+    // Add pagination if more than 6 templates
+    if (templates.length > templatesPerPage) {
+      keyboard.text('➡️ 다음', `catp:${category}:1:${fileKey}`);
+    }
+
+    // Add back button
+    keyboard.row();
+    keyboard.text('🔙 뒤로', `back_to_main:${fileKey}`);
+
+    await ctx.reply(
+      `🎨 **${categoryName} 스타일** (${templates.length}개)\n\n` +
+      `원하는 스타일을 선택하세요:`,
+      { reply_markup: keyboard }
+    );
+
+  } catch (error) {
+    console.error('❌ Error in category selection:', error);
+    await ctx.reply('❌ 카테고리 처리 중 오류가 발생했습니다.');
   }
 });
 
