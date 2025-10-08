@@ -1,11 +1,180 @@
 # 📝 CLAUDE.md - 개발 컨텍스트 문서
 
-## 🎯 프로젝트 상태 (2025-10-08)
+## 📋 현재 할 일 목록 (TODO List) - 2025-10-09
 
-### 🚨 최우선 프로젝트: AI 기반 이미지 분석 및 추천 시스템
-**우선순위**: 최고 (세션 기억 기능보다 우선)
-**상세 계획**: `docs/IMAGE_EDIT_IMPROVEMENT_PLAN.md` (필독!)
-**현재 상태**: AI 추천 시스템 구현 완료 ✅
+### 🔥 최우선 작업 (HIGH PRIORITY)
+
+#### 1. 관리자 인증 설정 (5분)
+- [ ] `/whoami` 명령어로 본인 User ID 확인
+- [ ] Render.com 환경변수에 `ADMIN_USER_IDS=<본인_ID>` 추가
+- [ ] `/help` 명령어로 어드민 섹션 표시 확인
+- [ ] `/apicost` 명령어 테스트
+
+#### 2. Telegram Stars 수익성 분석 검토 (완료됨)
+- [x] Telegram 수수료 30% 반영하여 재계산 완료
+- [x] 현재 가격 유지 결정 (60-65% 순이익률)
+- [x] `docs/PROFITABILITY_ANALYSIS.md` 업데이트 완료
+- **결론**: 가격 조정 불필요, 손익분기점 월 20-40명
+
+#### 3. Phase 1 어드민 기능 구현 (2-3시간)
+우선순위 1: **즉시 운영에 필요한 기능**
+
+**3.1. `/admin` 통합 대시보드**
+```typescript
+// src/services/admin-dashboard.ts 생성
+// 필요한 정보:
+- 실시간 통계 (24시간)
+  • 총 사용자 수
+  • 활성 사용자 수
+  • 이미지 편집 횟수
+  • 크레딧 충전 건수
+
+- 수익 현황 (24시간)
+  • 총 매출 (Telegram Stars → USD)
+  • Telegram 수수료 (30%)
+  • 순매출
+  • API 비용
+  • 순이익
+
+- 크레딧 현황
+  • 총 발행 크레딧
+  • 사용된 크레딧
+  • 남은 크레딧
+
+- 시스템 알림
+  • 결제 실패 건수
+  • API 에러 현황
+```
+
+**3.2. `/admin user:search <user_id>` 사용자 검색**
+```typescript
+// src/services/admin-users.ts 생성
+// 표시 정보:
+- 기본 정보 (User ID, username, 가입일)
+- 크레딧 현황 (무료/충전/구독)
+- 사용 통계 (총 편집, 총 충전 금액)
+- 상태 (VIP, 구독 상태)
+```
+
+**3.3. `/admin credit:grant <user_id> <amount> <reason>` 크레딧 수동 지급**
+```typescript
+// src/services/admin-credits.ts 생성
+// 기능:
+- CS 보상 크레딧 지급
+- addCredits() 함수 활용
+- credit_transactions에 로그 기록
+- 사용자에게 DM 발송
+```
+
+**구현 파일:**
+```
+src/
+├── services/
+│   ├── admin-dashboard.ts    # 신규 생성
+│   ├── admin-users.ts        # 신규 생성
+│   └── admin-credits.ts      # 신규 생성
+├── handlers/
+│   └── admin-handlers.ts     # 신규 생성
+└── types/
+    └── admin.types.ts        # 신규 생성
+
+netlify/functions/
+└── webhook.ts               # /admin 명령어 추가
+```
+
+### 🟡 중요 작업 (MEDIUM PRIORITY)
+
+#### 4. Phase 2 어드민 기능 구현 (1-2주)
+
+**4.1. `/admin users` 사용자 통계**
+- 성장 추이 (신규 가입)
+- 전환율 (무료→유료, 크레딧→구독)
+- 활성 사용자 (DAU, WAU, MAU)
+- 사용자 분류
+
+**4.2. `/admin revenue` 수익 분석**
+- 총 수익 분석 (Telegram 수수료 포함)
+- 패키지별 매출
+- 구독 매출
+- MRR 예상
+
+**4.3. `/admin prompts` 프롬프트 관리**
+- 프롬프트 목록 조회
+- 프롬프트 활성화/비활성화
+- 사용 통계 확인
+
+### 🟢 백로그 작업 (LOW PRIORITY)
+
+#### 5. Phase 3 어드민 기능 (1개월 내)
+- `/admin credit:bulk` - 일괄 크레딧 지급
+- `/admin prompt:edit` - 프롬프트 편집
+- `/admin prompt:stats` - 프롬프트 상세 통계
+
+#### 6. Phase 4 고급 분석 (2-3개월 내)
+- 실시간 알림 시스템
+- A/B 테스트 시스템
+- 코호트 분석
+- AI 자동 최적화 제안
+
+---
+
+## 📚 참고 문서
+
+### 필독 문서 (작업 전 확인)
+1. **`docs/ADMIN_FEATURES_PLAN.md`** - 어드민 기능 전체 계획
+   - 4개 Phase 상세 설명
+   - 구현 우선순위
+   - 예상 소요 시간
+
+2. **`docs/PROFITABILITY_ANALYSIS.md`** - 수익성 분석
+   - Telegram 수수료 30% 반영
+   - 패키지/구독별 순이익
+   - 손익분기점 분석
+
+3. **`docs/MONETIZATION_DESIGN.md`** - 결제 시스템 설계
+   - Telegram Stars 통합
+   - 크레딧 시스템
+   - 구독 플랜
+
+### 최근 완료된 작업
+- ✅ (2025-10-09) Telegram 수수료 30% 반영하여 수익성 재계산
+- ✅ (2025-10-09) `/credits` 명령어 추가 (사용자 크레딧 확인)
+- ✅ (2025-10-09) `/help`에 어드민 전용 섹션 추가
+- ✅ (2025-10-09) `/whoami` 명령어 추가 (User ID 확인)
+- ✅ (2025-10-09) 결제 핸들러 등록 순서 수정 (버튼 작동 수정)
+- ✅ (2025-10-09) 결제 시스템 테스트 완료 (100 Stars)
+
+---
+
+## 🎯 프로젝트 상태 (2025-10-09)
+
+### 현재 진행 상황
+
+#### ✅ 완료된 주요 시스템
+1. **AI 기반 이미지 분석 및 추천 시스템** (2025-10-08 완료)
+   - Gemini 2.0 Flash를 활용한 이미지 분석
+   - AI 창의적 제안 3개 자동 생성
+   - 템플릿 추천 다양성 개선
+
+2. **결제 시스템 (Telegram Stars)** (2025-10-09 완료)
+   - 크레딧 패키지 4종 (30/80/250/600회)
+   - 구독 플랜 4종 (라이트/베이직/프로/엔터프라이즈)
+   - 결제 핸들러 구현 및 테스트 완료
+   - 수익성 분석 완료 (60-65% 순이익률)
+
+3. **크레딧 시스템** (2025-10-09 완료)
+   - 무료/충전/구독 크레딧 분리
+   - 자동 차감 및 트랜잭션 로그
+   - 그룹 FOMO 전략 (1회 무료 체험)
+   - `/credits` 명령어로 잔액 확인
+
+#### 🔜 다음 단계
+**Phase 1 어드민 기능 구현** (2-3시간 예상)
+- `/admin` - 통합 대시보드
+- `/admin user:search` - 사용자 검색
+- `/admin credit:grant` - 크레딧 수동 지급
+
+자세한 내용은 상단 "현재 할 일 목록 (TODO List)" 참고
 
 ### ⚡ 작업 순서 (사용자 승인)
 1. ✅ **Gemini API 전환** - 완료 (2025-10-08)
