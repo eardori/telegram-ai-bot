@@ -10,6 +10,7 @@ exports.editImageWithReplicate = editImageWithReplicate;
 const generative_ai_1 = require("@google/generative-ai");
 const nano_banafo_client_1 = require("./nano-banafo-client");
 const grammy_1 = require("grammy");
+const api_cost_tracker_1 = require("./api-cost-tracker");
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const genAI = new generative_ai_1.GoogleGenerativeAI(GOOGLE_API_KEY);
 const geminiClient = new nano_banafo_client_1.NanoBanafoClient();
@@ -107,6 +108,21 @@ Generate the edited image following all instructions above.`;
         const editedBuffer = await geminiClient.editImage(imageBuffer, editPrompt);
         const processingTime = Date.now() - startTime;
         console.log(`✅ Image editing completed in ${processingTime}ms`);
+        // Log API usage for cost tracking
+        if (request.userId) {
+            await (0, api_cost_tracker_1.logAPIUsage)({
+                user_id: request.userId,
+                chat_id: request.chatId,
+                operation: 'image_edit',
+                model: 'gemini-2.5-flash-image-preview',
+                input_images: 1,
+                output_images: 1,
+                estimated_cost: 0, // Will be calculated in logAPIUsage
+                template_key: request.templateKey,
+                processing_time_ms: processingTime,
+                success: true
+            });
+        }
         // Create InputFile from buffer for grammY
         const outputFile = new grammy_1.InputFile(editedBuffer, `edited_${Date.now()}.jpg`);
         return {
@@ -118,6 +134,22 @@ Generate the edited image following all instructions above.`;
     catch (error) {
         console.error('❌ Image editing error:', error);
         const processingTime = Date.now() - startTime;
+        // Log failed API usage
+        if (request.userId) {
+            await (0, api_cost_tracker_1.logAPIUsage)({
+                user_id: request.userId,
+                chat_id: request.chatId,
+                operation: 'image_edit',
+                model: 'gemini-2.5-flash-image-preview',
+                input_images: 1,
+                output_images: 0,
+                estimated_cost: 0,
+                template_key: request.templateKey,
+                processing_time_ms: processingTime,
+                success: false,
+                error_message: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
         return {
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error',

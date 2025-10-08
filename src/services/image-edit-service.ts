@@ -7,6 +7,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NanoBanafoClient } from './nano-banafo-client';
 import { InputFile } from 'grammy';
+import { logAPIUsage } from './api-cost-tracker';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
@@ -17,6 +18,9 @@ export interface ImageEditRequest {
   templatePrompt: string;
   templateName: string;
   category: string;
+  userId?: number;  // For cost tracking
+  chatId?: number;  // For cost tracking
+  templateKey?: string;  // For cost tracking
 }
 
 export interface ImageEditResult {
@@ -135,6 +139,22 @@ Generate the edited image following all instructions above.`;
     const processingTime = Date.now() - startTime;
     console.log(`✅ Image editing completed in ${processingTime}ms`);
 
+    // Log API usage for cost tracking
+    if (request.userId) {
+      await logAPIUsage({
+        user_id: request.userId,
+        chat_id: request.chatId,
+        operation: 'image_edit',
+        model: 'gemini-2.5-flash-image-preview',
+        input_images: 1,
+        output_images: 1,
+        estimated_cost: 0, // Will be calculated in logAPIUsage
+        template_key: request.templateKey,
+        processing_time_ms: processingTime,
+        success: true
+      });
+    }
+
     // Create InputFile from buffer for grammY
     const outputFile = new InputFile(editedBuffer, `edited_${Date.now()}.jpg`);
 
@@ -147,6 +167,23 @@ Generate the edited image following all instructions above.`;
   } catch (error) {
     console.error('❌ Image editing error:', error);
     const processingTime = Date.now() - startTime;
+
+    // Log failed API usage
+    if (request.userId) {
+      await logAPIUsage({
+        user_id: request.userId,
+        chat_id: request.chatId,
+        operation: 'image_edit',
+        model: 'gemini-2.5-flash-image-preview',
+        input_images: 1,
+        output_images: 0,
+        estimated_cost: 0,
+        template_key: request.templateKey,
+        processing_time_ms: processingTime,
+        success: false,
+        error_message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
 
     return {
       success: false,

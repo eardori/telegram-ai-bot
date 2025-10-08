@@ -1101,7 +1101,10 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       imageUrl,
       templatePrompt: template.base_prompt,
       templateName: template.template_name_ko,
-      category: template.category
+      category: template.category,
+      userId: ctx.from?.id,
+      chatId: ctx.chat?.id,
+      templateKey: templateKey
     });
 
     // Check for Cloudflare 403 specifically
@@ -1372,7 +1375,10 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
       imageUrl,
       templatePrompt: template.base_prompt,
       templateName: template.template_name_ko,
-      category: template.category
+      category: template.category,
+      userId: ctx.from?.id,
+      chatId: ctx.chat?.id,
+      templateKey: templateKey
     });
 
     if (editResult.success && (editResult.outputUrl || editResult.outputFile)) {
@@ -1694,6 +1700,69 @@ function getCategoryEmoji(category: string): string {
   };
   return emojiMap[category] || '🎨';
 }
+
+// Admin command: API cost dashboard
+bot.command('apicost', async (ctx) => {
+  try {
+    // Check if user is admin (you can add admin user IDs to env)
+    const ADMIN_USER_IDS = process.env.ADMIN_USER_IDS?.split(',').map(id => parseInt(id)) || [];
+    const isAdmin = ADMIN_USER_IDS.includes(ctx.from?.id || 0);
+
+    if (!isAdmin) {
+      await ctx.reply('❌ This command is only available for administrators.');
+      return;
+    }
+
+    const { getTotalCosts, getDailyCostSummary } = await import('../../src/services/api-cost-tracker');
+
+    // Get 24-hour costs
+    const last24h = await getTotalCosts(
+      new Date(Date.now() - 24 * 60 * 60 * 1000),
+      new Date()
+    );
+
+    // Get 7-day costs
+    const last7days = await getTotalCosts(
+      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      new Date()
+    );
+
+    // Get 30-day costs
+    const last30days = await getTotalCosts(
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      new Date()
+    );
+
+    // Get all-time costs
+    const allTime = await getTotalCosts();
+
+    const message = `📊 **API Usage & Cost Report**\n\n` +
+      `**Last 24 Hours:**\n` +
+      `• Total Calls: ${last24h.total_calls}\n` +
+      `• Images Processed: ${last24h.total_images_processed}\n` +
+      `• Cost: $${last24h.total_cost.toFixed(4)}\n` +
+      `• Avg per call: $${(last24h.total_cost / (last24h.total_calls || 1)).toFixed(6)}\n\n` +
+      `**Last 7 Days:**\n` +
+      `• Total Calls: ${last7days.total_calls}\n` +
+      `• Images Processed: ${last7days.total_images_processed}\n` +
+      `• Cost: $${last7days.total_cost.toFixed(4)}\n\n` +
+      `**Last 30 Days:**\n` +
+      `• Total Calls: ${last30days.total_calls}\n` +
+      `• Images Processed: ${last30days.total_images_processed}\n` +
+      `• Cost: $${last30days.total_cost.toFixed(4)}\n\n` +
+      `**All Time:**\n` +
+      `• Total Calls: ${allTime.total_calls}\n` +
+      `• Images Processed: ${allTime.total_images_processed}\n` +
+      `• Total Cost: $${allTime.total_cost.toFixed(4)}\n\n` +
+      `💡 *Pricing: Input $0.00001875/img, Output $0.000075/img*`;
+
+    await ctx.reply(message);
+
+  } catch (error) {
+    console.error('❌ Error in apicost command:', error);
+    await ctx.reply('❌ Failed to fetch API cost data.');
+  }
+});
 
 // Bot commands
 bot.command('start', async (ctx) => {
