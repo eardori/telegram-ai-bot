@@ -2047,6 +2047,87 @@ bot.on('message:text', async (ctx) => {
             console.log('✏️ Image editing request detected!');
             console.log('🔍 Is Dobby edit:', isDobbyEdit);
             console.log('📝 Edit request:', text);
+            // Use the new photo upload handler with image analysis system
+            try {
+                const photo = replyToMessage.photo[replyToMessage.photo.length - 1];
+                // Create a temporary context with the photo
+                const photoCtx = {
+                    ...ctx,
+                    message: {
+                        ...ctx.message,
+                        photo: replyToMessage.photo,
+                        message_id: replyToMessage.message_id
+                    }
+                };
+                await ctx.reply('🔍 사진을 분석 중입니다...');
+                // Handle photo upload (will trigger analysis and show recommendations)
+                const uploadResult = await (0, photo_upload_handler_1.handlePhotoUpload)(photoCtx);
+                if (!uploadResult.success) {
+                    await ctx.reply(`❌ 사진 처리 중 오류가 발생했습니다.\n\n${uploadResult.error}`);
+                    return;
+                }
+                // Build message with AI suggestions and recommendations
+                let message = `✅ **사진 분석 완료!**\n\n`;
+                message += `🔍 **분석 결과:**\n${uploadResult.analysisSummary || '분석 중...'}\n\n`;
+                message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                // Store file ID in cache
+                const fileKey = storeFileId(ctx.chat.id, replyToMessage.message_id, photo.file_id);
+                // Create inline keyboard
+                const keyboard = new grammy_1.InlineKeyboard();
+                // Add AI Suggestions first
+                const aiSuggestions = uploadResult.analysis?.aiSuggestions || [];
+                if (aiSuggestions.length > 0) {
+                    // Store AI suggestions
+                    storeAISuggestions(fileKey, aiSuggestions);
+                    message += `✨ **AI 추천 (이 사진만을 위한 특별 제안):**\n\n`;
+                    aiSuggestions.forEach((suggestion, index) => {
+                        message += `${index + 1}. **${suggestion.title}**\n`;
+                        message += `   ${suggestion.description}\n\n`;
+                        keyboard.text(`✨ ${suggestion.title}`, `ai:${index}:${fileKey}`);
+                        if ((index + 1) % 2 === 0 || index === aiSuggestions.length - 1) {
+                            keyboard.row();
+                        }
+                    });
+                    message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                }
+                // Add template recommendations
+                if (uploadResult.recommendations && uploadResult.recommendations.length > 0) {
+                    message += `🎯 **템플릿 추천** (적합도 순):\n\n`;
+                    uploadResult.recommendations.slice(0, 4).forEach((rec) => {
+                        const stars = '⭐'.repeat(Math.ceil(rec.confidence / 25));
+                        message += `${rec.emoji} ${rec.nameKo} ${stars}\n`;
+                    });
+                    message += `\n💡 **아래 버튼을 눌러 스타일을 선택하세요:**\n`;
+                    // Add template buttons
+                    uploadResult.recommendations.slice(0, 4).forEach(rec => {
+                        keyboard.text(`${rec.emoji} ${rec.nameKo}`, `t:${rec.templateKey}:${fileKey}`).row();
+                    });
+                }
+                // Add category buttons
+                keyboard.row();
+                keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`)
+                    .text('📸 인물 스타일', `cat:portrait_styling:${fileKey}`)
+                    .text('🎮 게임/애니', `cat:game_animation:${fileKey}`);
+                keyboard.row();
+                keyboard.text('🛠️ 이미지 편집', `cat:image_editing:${fileKey}`)
+                    .text('✨ 창의적 변환', `cat:creative_transform:${fileKey}`);
+                // Add "View All" button
+                keyboard.row();
+                keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
+                await ctx.reply(message, {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboard
+                });
+                return; // Exit after handling with new system
+            }
+            catch (error) {
+                console.error('❌ Error in photo reply handler:', error);
+                await ctx.reply('❌ 사진 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+                return;
+            }
+        }
+        // OLD IMPLEMENTATION BELOW - This code will not run anymore
+        if (false) {
             try {
                 // Get the largest photo
                 console.log('📷 Getting largest photo from message...');
@@ -2452,11 +2533,8 @@ bot.on('message:text', async (ctx) => {
 - 대용량 이미지는 Files API로 자동 처리됩니다`);
                 }
             }
-            return; // Exit after handling image editing
-        }
-        else {
-            console.log('💬 Reply to photo but no editing keywords detected');
-        }
+            return; // Exit after handling image editing (OLD CODE - DISABLED)
+        } // End of if (false) block
     }
     // Check for Dobby activation and other commands
     console.log(`🔍 DEBUGGING - Checking Dobby activation for: "${text}"`);
