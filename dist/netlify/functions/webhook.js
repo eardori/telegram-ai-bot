@@ -1954,6 +1954,91 @@ bot.command('help', async (ctx) => {
     const helpMessage = await getHelpMessage();
     await ctx.reply(helpMessage);
 });
+// Terms of Service command (required for Telegram Stars)
+bot.command('terms', async (ctx) => {
+    console.log('📜 Terms command received');
+    const termsMessage = `📜 **이용 약관 (Terms of Service)**
+
+**1. 서비스 개요**
+• Multiful AI Bot은 AI 기반 이미지 편집 서비스를 제공합니다
+• Telegram Stars를 통해 크레딧 및 구독을 구매할 수 있습니다
+
+**2. 크레딧 시스템**
+• 1 크레딧 = 1회 이미지 편집
+• 크레딧은 환불 불가능하며, 구매 후 즉시 사용 가능합니다
+• 무료 크레딧은 신규 가입 시 5개가 제공됩니다
+
+**3. 구독 서비스**
+• 구독은 월 단위로 자동 갱신됩니다
+• 매월 초에 크레딧이 자동 충전됩니다
+• 구독 취소는 언제든지 가능하며, 남은 기간까지 유효합니다
+
+**4. 환불 정책**
+• 디지털 상품 특성상 기본적으로 환불 불가합니다
+• 기술적 오류로 인한 문제 발생 시 /support로 문의해주세요
+• 정당한 사유가 인정될 경우 개별 검토 후 환불 가능합니다
+
+**5. 서비스 이용 제한**
+• 불법적이거나 유해한 콘텐츠 생성은 금지됩니다
+• 서비스 남용 시 계정이 제한될 수 있습니다
+• AI 생성 결과물의 저작권은 사용자에게 있습니다
+
+**6. 개인정보 보호**
+• 사용자 정보는 서비스 제공 목적으로만 사용됩니다
+• Telegram ID, 사용 내역만 저장됩니다
+• 업로드된 이미지는 편집 후 즉시 삭제됩니다
+
+**7. 면책 사항**
+• AI 생성 결과물의 정확성을 보장하지 않습니다
+• 서비스 중단 시 사전 공지하며, 크레딧은 유지됩니다
+• 제3자 API 장애로 인한 문제는 책임지지 않습니다
+
+**8. 약관 변경**
+• 본 약관은 사전 고지 후 변경될 수 있습니다
+• 계속 사용 시 변경된 약관에 동의한 것으로 간주됩니다
+
+**문의**: /support 명령어를 사용하세요
+
+마지막 업데이트: 2025년 1월`;
+    await ctx.reply(termsMessage);
+});
+// Support command (required for Telegram Stars)
+bot.command('support', async (ctx) => {
+    console.log('💬 Support command received');
+    const supportMessage = `💬 **고객 지원 (Customer Support)**
+
+**결제 관련 문의**
+• 결제 오류, 크레딧 미지급 등
+• 환불 요청 (정당한 사유 필요)
+• 구독 관리 문제
+
+**기술적 문제**
+• 이미지 편집 실패
+• 봇 오작동
+• 기타 오류
+
+**📧 지원 채널:**
+1. GitHub Issues: https://github.com/eardori/telegram-ai-bot/issues
+2. 이메일: support@multiful.ai (계획 중)
+3. Telegram 그룹: (계획 중)
+
+**⏰ 응답 시간:**
+• 영업일 기준 24-48시간 이내
+
+**📝 문의 시 포함 정보:**
+• 사용자 ID: ${ctx.from?.id}
+• 문제 발생 시각
+• 스크린샷 (가능한 경우)
+• 상세한 문제 설명
+
+**💡 자주 묻는 질문:**
+• 크레딧이 차감되지 않나요? → /help 참고
+• 이미지 편집이 실패했나요? → 다시 시도해주세요
+• 구독을 취소하고 싶나요? → 설정에서 취소 가능
+
+감사합니다!`;
+    await ctx.reply(supportMessage);
+});
 // Version command - shows version history
 bot.command('version', async (ctx) => {
     console.log('📚 Version command received');
@@ -3088,17 +3173,27 @@ ${helpMessage}
  */
 bot.callbackQuery(/^buy_credits:(.+)$/, async (ctx) => {
     try {
+        console.log('🔔 Buy credits button clicked!');
+        console.log('Callback data:', ctx.callbackQuery?.data);
+        console.log('From user:', ctx.from?.id, ctx.from?.username);
         const packageKey = ctx.match[1];
+        console.log('Package key:', packageKey);
         await ctx.answerCallbackQuery('결제 페이지를 생성하는 중...');
+        console.log('✅ Callback query answered');
         console.log(`💳 Creating invoice for package: ${packageKey}`);
         const success = await (0, telegram_stars_payment_1.createCreditPackageInvoice)(ctx, packageKey);
         if (!success) {
             console.error('❌ Failed to create invoice');
+            await ctx.reply('❌ Invoice 생성에 실패했습니다. 로그를 확인해주세요.');
+        }
+        else {
+            console.log('✅ Invoice created successfully');
         }
     }
     catch (error) {
         console.error('❌ Error in buy_credits handler:', error);
-        await ctx.reply('❌ 결제 페이지 생성 중 오류가 발생했습니다.');
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+        await ctx.reply(`❌ 결제 페이지 생성 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 });
 /**
