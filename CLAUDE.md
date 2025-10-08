@@ -1,120 +1,148 @@
 # 📝 CLAUDE.md - 개발 컨텍스트 문서
 
-## 📋 현재 할 일 목록 (TODO List) - 2025-10-09
+## 📋 현재 할 일 목록 (TODO List) - 2025-01-09
 
-### 🔥 최우선 작업 (HIGH PRIORITY)
+### ✅ 완료된 작업 (COMPLETED)
 
-#### 1. 관리자 인증 설정 (5분)
-- [ ] `/whoami` 명령어로 본인 User ID 확인
-- [ ] Render.com 환경변수에 `ADMIN_USER_IDS=<본인_ID>` 추가
-- [ ] `/help` 명령어로 어드민 섹션 표시 확인
-- [ ] `/apicost` 명령어 테스트
+#### 1. 관리자 대시보드 시스템 ✅ (2025-01-09 완료)
+- [x] `/admin` 또는 `/admin dashboard [24h|7d|30d]` - 통합 대시보드
+  - 실시간 통계 (총 사용자, 활성 사용자, 신규 가입, 편집 횟수)
+  - 수익 현황 (Telegram 수수료 30% 포함)
+  - 크레딧 현황 (발행/사용/남은 크레딧)
+- [x] `/admin user:search <user_id>` - 사용자 검색
+  - 기본 정보 및 크레딧 현황
+  - 구독 정보 및 VIP 상태
+  - 사용 통계 (총 편집, 총 충전 금액, 선호 템플릿)
+- [x] `/admin credit:grant <user_id> <amount> <reason>` - 크레딧 수동 지급
+  - CS 보상 크레딧 지급
+  - 자동 DM 알림
+  - 관리자 활동 로그 기록
+- [x] 실시간 알림 시스템
+  - API 오류율 모니터링 (임계값: 5%)
+  - 일일 API 비용 알림 (임계값: $50)
+  - 결제 실패 추적
+  - 매출 하락 경고 (임계값: 20%)
 
-#### 2. Telegram Stars 수익성 분석 검토 (완료됨)
-- [x] Telegram 수수료 30% 반영하여 재계산 완료
-- [x] 현재 가격 유지 결정 (60-65% 순이익률)
-- [x] `docs/PROFITABILITY_ANALYSIS.md` 업데이트 완료
-- **결론**: 가격 조정 불필요, 손익분기점 월 20-40명
+**구현된 파일:**
+- `src/types/admin.types.ts` - 타입 정의
+- `src/services/admin-dashboard.ts` - 대시보드 통계
+- `src/services/admin-users.ts` - 사용자 검색
+- `src/services/admin-credits.ts` - 크레딧 관리
+- `src/services/admin-alerts.ts` - 알림 시스템
+- `netlify/functions/webhook.ts` - 명령어 핸들러
 
-#### 3. Phase 1 어드민 기능 구현 (2-3시간)
-우선순위 1: **즉시 운영에 필요한 기능**
+**배포 상태:** ✅ Render.com에 배포 완료 (커밋: 3cce792)
 
-**3.1. `/admin` 통합 대시보드**
+#### 2. Telegram Stars 결제 시스템 ✅ (2025-01-09 완료)
+- [x] Telegram 수수료 30% 반영하여 수익성 재계산
+- [x] 크레딧 패키지 4종 구현
+- [x] 구독 플랜 4종 구현
+- [x] 결제 핸들러 및 테스트 완료
+- **결론**: 가격 조정 불필요, 60-65% 순이익률 유지
+
+### 🔥 다음 작업 (HIGH PRIORITY)
+
+#### 3. 프롬프트 관리 시스템 (1-2일 예상)
+**목표**: 템플릿 활성화/비활성화 및 사용 통계
+
+**3.1. `/admin prompts` - 프롬프트 목록**
 ```typescript
-// src/services/admin-dashboard.ts 생성
-// 필요한 정보:
-- 실시간 통계 (24시간)
-  • 총 사용자 수
-  • 활성 사용자 수
-  • 이미지 편집 횟수
-  • 크레딧 충전 건수
-
-- 수익 현황 (24시간)
-  • 총 매출 (Telegram Stars → USD)
-  • Telegram 수수료 (30%)
-  • 순매출
-  • API 비용
-  • 순이익
-
-- 크레딧 현황
-  • 총 발행 크레딧
-  • 사용된 크레딧
-  • 남은 크레딧
-
-- 시스템 알림
-  • 결제 실패 건수
-  • API 에러 현황
-```
-
-**3.2. `/admin user:search <user_id>` 사용자 검색**
-```typescript
-// src/services/admin-users.ts 생성
-// 표시 정보:
-- 기본 정보 (User ID, username, 가입일)
-- 크레딧 현황 (무료/충전/구독)
-- 사용 통계 (총 편집, 총 충전 금액)
-- 상태 (VIP, 구독 상태)
-```
-
-**3.3. `/admin credit:grant <user_id> <amount> <reason>` 크레딧 수동 지급**
-```typescript
-// src/services/admin-credits.ts 생성
 // 기능:
-- CS 보상 크레딧 지급
-- addCredits() 함수 활용
-- credit_transactions에 로그 기록
-- 사용자에게 DM 발송
+- 전체 템플릿 목록 조회
+- 템플릿별 사용 횟수 및 인기도
+- 활성화 상태 표시
+- 카테고리별 그룹화
 ```
 
-**구현 파일:**
-```
-src/
-├── services/
-│   ├── admin-dashboard.ts    # 신규 생성
-│   ├── admin-users.ts        # 신규 생성
-│   └── admin-credits.ts      # 신규 생성
-├── handlers/
-│   └── admin-handlers.ts     # 신규 생성
-└── types/
-    └── admin.types.ts        # 신규 생성
-
-netlify/functions/
-└── webhook.ts               # /admin 명령어 추가
+**3.2. `/admin prompt:stats <template_key>` - 상세 통계**
+```typescript
+// 기능:
+- 템플릿별 총 사용 횟수
+- 최근 7일/30일 사용 추이
+- 평균 처리 시간
+- 성공률 (에러 없는 편집 비율)
+- 사용자 만족도 (재사용률)
 ```
 
-### 🟡 중요 작업 (MEDIUM PRIORITY)
+**3.3. `/admin prompt:toggle <template_key>` - 활성화 토글**
+```typescript
+// 기능:
+- 템플릿 활성화/비활성화
+- 비활성화 시 사용자에게 보이지 않음
+- A/B 테스트용 플래그 설정
+```
 
-#### 4. Phase 2 어드민 기능 구현 (1-2주)
+**데이터베이스:**
+```sql
+-- prompt_templates 테이블에 통계 필드 추가
+ALTER TABLE prompt_templates ADD COLUMN usage_count INT DEFAULT 0;
+ALTER TABLE prompt_templates ADD COLUMN last_used_at TIMESTAMP;
 
-**4.1. `/admin users` 사용자 통계**
-- 성장 추이 (신규 가입)
-- 전환율 (무료→유료, 크레딧→구독)
-- 활성 사용자 (DAU, WAU, MAU)
-- 사용자 분류
+-- 사용 통계 뷰 생성
+CREATE VIEW prompt_usage_stats AS ...
+```
 
-**4.2. `/admin revenue` 수익 분석**
-- 총 수익 분석 (Telegram 수수료 포함)
-- 패키지별 매출
-- 구독 매출
-- MRR 예상
+#### 4. 추천인 시스템 (2-3일 예상)
+**목표**: 바이럴 성장 및 사용자 획득 비용 절감 (CAC $3-5 → $0.04)
 
-**4.3. `/admin prompts` 프롬프트 관리**
-- 프롬프트 목록 조회
-- 프롬프트 활성화/비활성화
-- 사용 통계 확인
+**4.1. 추천 코드 생성 시스템**
+```typescript
+// 기능:
+- 사용자별 고유 코드 자동 생성 (예: MULTI123)
+- users.referral_code 필드 자동 설정 (DB 트리거)
+- 코드 인코딩/디코딩 함수
+```
+
+**4.2. `/start <referral_code>` Deep Link 처리**
+```typescript
+// 기능:
+- 가입 시 추천 코드 검증
+- 추천인 + 피추천인 각 10 크레딧 지급
+- 중복 방지 (referrals 테이블)
+- 자동 DM 알림
+```
+
+**4.3. `/referral` 명령어 - 추천 통계**
+```typescript
+// 기능:
+- 내 추천 코드 및 링크 표시
+- 초대한 친구 수 확인
+- 획득한 보상 크레딧 확인
+- 공유 버튼 제공
+```
+
+**4.4. 계단식 보너스 시스템**
+```typescript
+// 추천 횟수 마일스톤:
+- 5명: +20 크레딧
+- 10명: +50 크레딧
+- 25명: +150 크레딧
+- 50명: VIP 혜택 + 500 크레딧
+```
+
+**데이터베이스:**
+```sql
+-- 사용자 테이블에 추천 코드 필드 추가
+ALTER TABLE users ADD COLUMN referral_code VARCHAR(20) UNIQUE;
+
+-- 추천 코드 자동 생성 트리거
+CREATE OR REPLACE FUNCTION set_user_referral_code() ...
+CREATE TRIGGER trigger_set_referral_code ...
+
+-- referrals 테이블 활용 (이미 존재)
+```
+
+**예상 효과:**
+- CAC: $3-5 → **$0.04** (99% 절감)
+- 바이럴 계수 K: 0.9 → 목표 K > 1
 
 ### 🟢 백로그 작업 (LOW PRIORITY)
 
-#### 5. Phase 3 어드민 기능 (1개월 내)
-- `/admin credit:bulk` - 일괄 크레딧 지급
-- `/admin prompt:edit` - 프롬프트 편집
-- `/admin prompt:stats` - 프롬프트 상세 통계
-
-#### 6. Phase 4 고급 분석 (2-3개월 내)
-- 실시간 알림 시스템
-- A/B 테스트 시스템
-- 코호트 분석
-- AI 자동 최적화 제안
+#### 5. 고급 분석 시스템 (1-2개월 내)
+- `/admin revenue` - 수익 분석 (패키지/구독별)
+- `/admin users` - 사용자 성장 추이
+- 전환율 분석 (무료→유료, 크레딧→구독)
+- 리텐션 분석 (DAU, WAU, MAU)
 
 ---
 

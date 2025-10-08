@@ -6,7 +6,8 @@
 3. [사용자 여정 (User Journey)](#사용자-여정)
 4. [기술 아키텍처](#기술-아키텍처)
 5. [데이터베이스 스키마](#데이터베이스-스키마)
-6. [구현 우선순위](#구현-우선순위)
+6. [추천인 시스템](#추천인-시스템)
+7. [구현 우선순위](#구현-우선순위)
 
 ---
 
@@ -677,40 +678,365 @@ CREATE INDEX idx_referrals_referred ON referrals(referred_id);
 
 ---
 
+## 🎁 추천인 시스템
+
+### 개요
+사용자 획득 비용(CAC)을 낮추고 바이럴 성장을 촉진하기 위한 추천인 리워드 시스템
+
+### 작동 방식
+
+**1. 추천인 코드 생성**
+```typescript
+// 각 사용자는 고유 추천 코드를 보유
+// 예: USER_123456 → 추천 코드: MULTI123
+async function generateReferralCode(userId: number): Promise<string> {
+  // 알고리즘: MULTI + userId를 base36로 인코딩
+  const encoded = userId.toString(36).toUpperCase();
+  return `MULTI${encoded}`;
+}
+
+// 추천 코드로 사용자 ID 역추적 가능
+function decodeReferralCode(code: string): number | null {
+  if (!code.startsWith('MULTI')) return null;
+  const encoded = code.substring(5);
+  return parseInt(encoded, 36);
+}
+```
+
+**2. 가입 시 추천 코드 입력**
+```typescript
+// /start 명령어로 가입 시
+bot.command('start', async (ctx) => {
+  const userId = ctx.from?.id;
+
+  // Deep link 파라미터 확인
+  const args = ctx.message?.text?.split(' ');
+  const referralCode = args?.[1]; // /start MULTI123
+
+  // 신규 유저 등록
+  const isNew = await registerUser(userId, {
+    username: ctx.from?.username,
+    first_name: ctx.from?.first_name
+  });
+
+  if (isNew && referralCode) {
+    // 추천인 코드 검증 및 처리
+    const referrerId = decodeReferralCode(referralCode);
+
+    if (referrerId && referrerId !== userId) {
+      await processReferral(referrerId, userId);
+
+      await ctx.reply(
+        `🎉 **환영합니다!**\n\n` +
+        `추천인 코드를 입력하셨습니다!\n` +
+        `추천인과 함께 **10 크레딧**을 받았습니다! 🎁\n\n` +
+        `• 기본 무료 크레딧: 5회\n` +
+        `• 추천 보너스: +10회\n` +
+        `• **총 15회 무료 편집 가능!**`
+      );
+    }
+  }
+});
+```
+
+**3. 리워드 지급**
+```typescript
+async function processReferral(
+  referrerId: number,
+  refereeId: number
+): Promise<void> {
+  const REFERRAL_BONUS = 10; // 양쪽 모두 10 크레딧
+
+  // 중복 확인
+  const { data: existing } = await supabase
+    .from('referrals')
+    .select('id')
+    .eq('referrer_id', referrerId)
+    .eq('referee_id', refereeId)
+    .single();
+
+  if (existing) {
+    console.log('Referral already processed');
+    return;
+  }
+
+  // 리퍼럴 기록 생성
+  await supabase
+    .from('referrals')
+    .insert({
+      referrer_id: referrerId,
+      referee_id: refereeId,
+      referral_code: generateReferralCode(referrerId),
+      status: 'completed',
+      rewarded_at: new Date().toISOString()
+    });
+
+  // 양쪽에 크레딧 지급
+  await addCredits(referrerId, REFERRAL_BONUS, 'free', 'Referral reward - referrer');
+  await addCredits(refereeId, REFERRAL_BONUS, 'free', 'Referral reward - referee');
+
+  // 추천인에게 알림
+  try {
+    await bot.api.sendMessage(
+      referrerId,
+      `🎉 **친구가 가입했습니다!**\n\n` +
+      `추천 보상으로 **${REFERRAL_BONUS} 크레딧**을 받았습니다!\n` +
+      `친구를 더 초대하고 무료 크레딧을 받아보세요! 🚀\n\n` +
+      `내 추천 코드: \`${generateReferralCode(referrerId)}\``,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    console.warn('Failed to notify referrer:', error);
+  }
+}
+```
+
+**4. 추천 링크 공유 기능**
+```typescript
+bot.command('referral', async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+
+  const referralCode = generateReferralCode(userId);
+  const referralLink = `https://t.me/MultifulDobi_bot?start=${referralCode}`;
+
+  // 추천 통계 조회
+  const { count: referralCount } = await supabase
+    .from('referrals')
+    .select('*', { count: 'exact', head: true })
+    .eq('referrer_id', userId)
+    .eq('status', 'completed');
+
+  const totalEarned = (referralCount || 0) * 10; // 10 크레딧 × 추천 횟수
+
+  await ctx.reply(
+    `🎁 **친구 초대하고 무료 크레딧 받기!**\n\n` +
+    `친구가 아래 링크로 가입하면:\n` +
+    `• 친구: **+10 크레딧** 🎉\n` +
+    `• 당신: **+10 크레딧** 🎁\n\n` +
+    `**내 추천 코드:**\n` +
+    `\`${referralCode}\`\n\n` +
+    `**내 추천 링크:**\n` +
+    `${referralLink}\n\n` +
+    `━━━━━━━━━━━━━━━━\n` +
+    `📊 **추천 통계:**\n` +
+    `• 초대한 친구: ${referralCount || 0}명\n` +
+    `• 받은 보상: ${totalEarned} 크레딧\n\n` +
+    `💡 친구를 많이 초대할수록 무료로 더 많이 사용하세요!`,
+    { parse_mode: 'Markdown' }
+  );
+});
+```
+
+### 데이터베이스 스키마
+
+```sql
+-- 사용자 테이블에 추천 코드 필드 추가
+ALTER TABLE users ADD COLUMN referral_code VARCHAR(20) UNIQUE;
+
+-- 추천 코드 자동 생성 함수
+CREATE OR REPLACE FUNCTION generate_referral_code(user_id BIGINT)
+RETURNS VARCHAR(20) AS $$
+DECLARE
+  encoded TEXT;
+BEGIN
+  -- base36 인코딩: 0-9, A-Z (36진수)
+  encoded := UPPER(TO_HEX(user_id)); -- 간단화를 위해 HEX 사용
+  RETURN 'MULTI' || encoded;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 신규 사용자 생성 시 자동으로 추천 코드 생성
+CREATE OR REPLACE FUNCTION set_user_referral_code()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.referral_code IS NULL THEN
+    NEW.referral_code := generate_referral_code(NEW.id);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_set_referral_code
+  BEFORE INSERT ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION set_user_referral_code();
+
+-- 추천 관계 테이블 (이미 존재)
+-- referrals 테이블은 이미 데이터베이스 스키마에 정의되어 있음
+```
+
+### 프로모션 전략
+
+**1. 초기 런칭 이벤트**
+```
+🎉 런칭 특별 이벤트!
+친구 초대하면 양쪽 모두 15 크레딧!
+(기간: 2025년 1월 31일까지)
+```
+
+**2. 계단식 리워드**
+```typescript
+// 추천 횟수에 따른 보너스
+const REFERRAL_TIERS = [
+  { count: 5, bonus: 20, message: '5명 초대 달성! 보너스 +20 크레딧' },
+  { count: 10, bonus: 50, message: '10명 초대 달성! 보너스 +50 크레딧' },
+  { count: 25, bonus: 150, message: '25명 초대 달성! 보너스 +150 크레딧' },
+  { count: 50, bonus: 500, message: '🎖️ 50명 초대 달성! VIP 혜택 + 500 크레딧' }
+];
+```
+
+**3. 그룹 공유 버튼**
+```typescript
+// 편집 완료 후 공유 버튼 제공
+await ctx.reply(
+  '✅ 편집 완료!\n\n💡 친구들에게도 공유해보세요!',
+  {
+    reply_markup: {
+      inline_keyboard: [[
+        {
+          text: '🎁 친구 초대하고 10 크레딧 받기',
+          url: `https://t.me/share/url?url=${referralLink}&text=AI로 사진 편집해보세요! 우리 둘 다 10회 무료!`
+        }
+      ]]
+    }
+  }
+);
+```
+
+### 예상 효과
+
+**바이럴 계수 (Viral Coefficient) 계산:**
+```
+K = i × c
+i = 평균 초대 횟수 (예: 3명)
+c = 초대 수락률 (예: 30%)
+
+K = 3 × 0.3 = 0.9
+
+→ K > 1이 되면 기하급수적 성장
+→ 초대당 보상을 높이면 i 증가
+→ UX 개선으로 c 증가
+```
+
+**비용 분석:**
+- 추천 보상: 20 크레딧 (추천인 + 피추천인)
+- API 비용: 20 × $0.002 = **$0.04**
+- 신규 사용자 1명 획득 비용: $0.04
+- 일반 광고 CAC: $3-5
+- **절감율: 99%** 🎯
+
+---
+
 ## 🎯 구현 우선순위
 
-### Phase 1: MVP (1-2주)
+### Phase 1: MVP ✅ **완료**
 **목표**: 기본 크레딧 시스템 + Telegram Stars 결제
 
-- [ ] 데이터베이스 스키마 생성
-- [ ] Auth Service 구현
+- [x] 데이터베이스 스키마 생성
+- [x] Auth Service 구현
   - 신규 유저 자동 등록
   - 무료 크레딧 5개 지급
-- [ ] Credit Manager 구현
+- [x] Credit Manager 구현
   - 크레딧 조회/차감
   - 이미지 편집 시 크레딧 체크
-- [ ] Payment Handler 기본 구현
+- [x] Payment Handler 기본 구현
   - Telegram Stars Invoice 생성
   - 결제 완료 처리
   - 크레딧 충전
-- [ ] 그룹 데모 제한
-  - 1일 3회 제한
-  - Deep Link로 개인 DM 유도
+- [x] 그룹 FOMO 전략
+  - 그룹당 1회 무료 체험
+  - 등록 유저 크레딧 차감 + DM 알림
+  - 비등록 유저 가입 유도
 
-### Phase 2: 구독 시스템 (2-3주)
+### Phase 2: 구독 시스템 ✅ **완료**
 **목표**: 월간 구독 플랜 추가
 
-- [ ] 구독 플랜 설정
-- [ ] Telegram Stars 구독 API 연동
-- [ ] 자동 갱신 관리
-- [ ] 구독 만료 알림
+- [x] 구독 플랜 설정
+- [x] Telegram Stars 구독 API 연동
+- [x] 자동 갱신 관리
+- [x] 구독 만료 알림
 
-### Phase 3: 고급 기능 (3-4주)
-**목표**: 리텐션 및 바이럴 기능
+### Phase 3: 관리자 시스템 ✅ **완료** (2025-01-09)
+**목표**: 실시간 모니터링 및 사용자 관리
 
-- [ ] 리퍼럴 프로그램
-  - 친구 초대 시 양쪽 5크레딧
-- [ ] 사용 통계 대시보드
+- [x] 관리자 대시보드
+  - 실시간 통계 (24h/7d/30d)
+  - 매출 현황 (Telegram 수수료 30% 포함)
+  - 크레딧 사용 현황
+- [x] 사용자 검색 및 관리
+  - 전체 사용자 프로필 조회
+  - VIP 상태, 구독 정보
+  - 사용 통계 및 선호 템플릿
+- [x] 크레딧 관리
+  - CS 보상 지급
+  - 남용 사례 회수
+  - 자동 DM 알림
+- [x] 실시간 알림 시스템
+  - API 오류율 모니터링
+  - 일일 비용 알림
+  - 매출 하락 경고
+
+**명령어:**
+- `/admin` - 대시보드 표시
+- `/admin user:search <user_id>` - 사용자 검색
+- `/admin credit:grant <user_id> <amount> <reason>` - 크레딧 지급
+
+### Phase 4: 프롬프트 관리 시스템 🔄 **다음 작업**
+**목표**: 템플릿 활성화/비활성화 및 통계
+
+- [ ] 프롬프트 목록 조회
+  - 템플릿별 사용 횟수
+  - 인기도 순위
+  - 활성화 상태
+- [ ] 템플릿 제어
+  - 활성화/비활성화 토글
+  - A/B 테스트 기능
+  - 카테고리별 관리
+- [ ] 사용 통계
+  - 템플릿별 성공률
+  - 평균 처리 시간
+  - 사용자 선호도 분석
+
+**예상 명령어:**
+- `/admin prompts` - 전체 템플릿 목록
+- `/admin prompt:stats <template_key>` - 상세 통계
+- `/admin prompt:toggle <template_key>` - 활성화 토글
+
+### Phase 5: 추천인 시스템 🎯 **계획됨**
+**목표**: 바이럴 성장 및 사용자 획득 비용 절감
+
+- [ ] 추천 코드 시스템
+  - 사용자별 고유 코드 자동 생성
+  - Deep link 처리 (`/start MULTI123`)
+  - 추천 관계 추적
+- [ ] 리워드 지급
+  - 추천인 + 피추천인 각 10 크레딧
+  - 중복 방지 로직
+  - 자동 DM 알림
+- [ ] 추천 통계 및 공유
+  - `/referral` 명령어
+  - 초대 횟수 및 획득 크레딧
+  - 공유 링크 및 버튼
+- [ ] 계단식 보너스
+  - 5명: +20 크레딧
+  - 10명: +50 크레딧
+  - 25명: +150 크레딧
+  - 50명: VIP + 500 크레딧
+
+**데이터베이스:**
+- `users.referral_code` 필드 추가
+- 자동 생성 트리거
+- `referrals` 테이블 활용
+
+**예상 효과:**
+- CAC: $3-5 → **$0.04** (99% 절감)
+- 바이럴 계수 K = 0.9 (목표: K > 1)
+
+### Phase 6: 고급 분석 🚀 **장기 계획**
+**목표**: 데이터 기반 의사결정
+
+- [ ] 리텐션 분석
   - /mystats 명령어
 - [ ] 재참여 캠페인
   - 비활성 유저 알림
