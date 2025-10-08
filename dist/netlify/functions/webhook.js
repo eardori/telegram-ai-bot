@@ -717,12 +717,6 @@ ${versionInfo}
 • 👗 **의상 스타일링** - 원하는 의상 선택 (정장, 드레스, 한복 등 6종)
 • 😊 **표정 변경** - 원하는 표정 선택 (웃음, 진지, 신비로운 등 5종)
 
-💬 **도비 개인비서 모드:**
-• **"도비야, [질문]"** - 궁금한 것 물어보기
-• **"도비야, [설명] 그려줘"** - 이미지 생성
-• **"도비야, 사용법"** - 도움말 보기
-• **사진에 "도비야" 답장** - 사진 편집
-
 📋 **유용한 명령어:**
 • /help - 이 도움말 보기
 • /credits - 💳 크레딧 잔액 확인
@@ -1956,6 +1950,18 @@ bot.command('help', async (ctx) => {
     console.log('❓ Help command received');
     const helpMessage = await getHelpMessage();
     await ctx.reply(helpMessage);
+});
+// Whoami command - shows user ID for admin setup
+bot.command('whoami', async (ctx) => {
+    const userId = ctx.from?.id;
+    const username = ctx.from?.username || 'N/A';
+    const firstName = ctx.from?.first_name || 'N/A';
+    await ctx.reply(`👤 **당신의 정보:**\n\n` +
+        `• **User ID**: \`${userId}\`\n` +
+        `• **Username**: @${username}\n` +
+        `• **이름**: ${firstName}\n\n` +
+        `💡 **ADMIN_USER_IDS 환경변수에 추가하세요:**\n` +
+        `\`ADMIN_USER_IDS=${userId}\``, { parse_mode: 'Markdown' });
 });
 // Terms of Service command (required for Telegram Stars)
 bot.command('terms', async (ctx) => {
