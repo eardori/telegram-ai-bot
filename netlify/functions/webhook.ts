@@ -1015,6 +1015,7 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         .from('prompt_templates')
         .select('*')
         .eq('is_active', true)
+        .order('category', { ascending: true })
         .order('priority', { ascending: false });
 
       if (error || !allTemplates) {
@@ -1022,27 +1023,41 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         return;
       }
 
-      // Create paginated keyboard with all templates (8 per page)
+      // Create paginated keyboard with all templates (6 per page, 2 rows of 3)
       const keyboard = new InlineKeyboard();
-      const templatesPerPage = 8;
-      const templates = allTemplates.slice(0, templatesPerPage);
+      const templatesPerPage = 6;
+      const totalPages = Math.ceil(allTemplates.length / templatesPerPage);
+      const pageTemplates = allTemplates.slice(0, templatesPerPage);
 
-      templates.forEach(template => {
-        const emoji = getCategoryEmoji(template.category);
-        keyboard.text(
-          `${emoji} ${template.template_name_ko}`,
-          `t:${template.template_key}:${fileKey}`
-        ).row();
-      });
-
-      // Add pagination if more than 8 templates
-      if (allTemplates.length > templatesPerPage) {
-        keyboard.text('➡️ 다음 페이지', `tp:1:${fileKey}`);
+      // Add template buttons (2 rows of 3)
+      for (let i = 0; i < pageTemplates.length; i += 3) {
+        const row = pageTemplates.slice(i, i + 3);
+        row.forEach(template => {
+          const emoji = getCategoryEmoji(template.category);
+          keyboard.text(
+            `${emoji} ${template.template_name_ko}`,
+            `t:${template.template_key}:${fileKey}`
+          );
+        });
+        keyboard.row();
       }
 
-      await ctx.reply('🎨 **전체 스타일 목록:**\n\n원하는 스타일을 선택하세요:', {
-        reply_markup: keyboard
-      });
+      // Navigation buttons
+      keyboard.row();
+      keyboard.text(`1/${totalPages}`, `noop`);
+      if (allTemplates.length > templatesPerPage) {
+        keyboard.text('➡️ 다음', `tp:1:${fileKey}`);
+      }
+
+      // Back to categories
+      keyboard.row();
+      keyboard.text('🔙 카테고리로', `back_to_main:${fileKey}`);
+
+      await ctx.reply(
+        `🎨 **전체 스타일** (1/${totalPages} 페이지)\n\n` +
+        `총 ${allTemplates.length}개 스타일 중 선택:`,
+        { reply_markup: keyboard }
+      );
       return;
     }
 
@@ -1431,6 +1446,168 @@ bot.callbackQuery(/^rating:(.+):(\d+)$/, async (ctx) => {
   } catch (error) {
     console.error('❌ Error in submit_rating:', error);
   }
+});
+
+// Template pagination handler (for "View All")
+bot.callbackQuery(/^tp:(\d+):(.+):(.+)$/, async (ctx) => {
+  try {
+    const page = parseInt(ctx.match[1]);
+    const chatId = parseInt(ctx.match[2]);
+    const messageId = parseInt(ctx.match[3]);
+
+    await ctx.answerCallbackQuery();
+
+    const fileKey = `${chatId}:${messageId}`;
+
+    // Fetch all templates
+    const { data: allTemplates, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('is_active', true)
+      .order('category', { ascending: true })
+      .order('priority', { ascending: false });
+
+    if (error || !allTemplates) {
+      await ctx.reply('❌ 템플릿 목록을 가져오는 중 오류가 발생했습니다.');
+      return;
+    }
+
+    // Pagination settings
+    const templatesPerPage = 6; // 2 rows of 3
+    const totalPages = Math.ceil(allTemplates.length / templatesPerPage);
+    const start = page * templatesPerPage;
+    const end = start + templatesPerPage;
+    const pageTemplates = allTemplates.slice(start, end);
+
+    // Create keyboard
+    const keyboard = new InlineKeyboard();
+
+    // Add template buttons (2 rows of 3)
+    for (let i = 0; i < pageTemplates.length; i += 3) {
+      const row = pageTemplates.slice(i, i + 3);
+      row.forEach(template => {
+        const emoji = getCategoryEmoji(template.category);
+        keyboard.text(
+          `${emoji} ${template.template_name_ko}`,
+          `t:${template.template_key}:${fileKey}`
+        );
+      });
+      keyboard.row();
+    }
+
+    // Navigation buttons
+    keyboard.row();
+    if (page > 0) {
+      keyboard.text('⬅️ 이전', `tp:${page - 1}:${fileKey}`);
+    }
+    keyboard.text(`${page + 1}/${totalPages}`, `noop`);
+    if (page < totalPages - 1) {
+      keyboard.text('➡️ 다음', `tp:${page + 1}:${fileKey}`);
+    }
+
+    // Back to categories
+    keyboard.row();
+    keyboard.text('🔙 카테고리로', `back_to_main:${fileKey}`);
+
+    await ctx.editMessageText(
+      `🎨 **전체 스타일** (${page + 1}/${totalPages} 페이지)\n\n` +
+      `총 ${allTemplates.length}개 스타일 중 선택:`,
+      { reply_markup: keyboard }
+    );
+
+  } catch (error) {
+    console.error('❌ Error in template pagination:', error);
+    await ctx.reply('❌ 페이지 이동 중 오류가 발생했습니다.');
+  }
+});
+
+// Category pagination handler
+bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
+  try {
+    const category = ctx.match[1];
+    const page = parseInt(ctx.match[2]);
+    const chatId = parseInt(ctx.match[3]);
+    const messageId = parseInt(ctx.match[4]);
+
+    await ctx.answerCallbackQuery();
+
+    const fileKey = `${chatId}:${messageId}`;
+
+    // Get category name
+    const categoryNames: Record<string, string> = {
+      '3d_figurine': '🎭 3D/피규어',
+      'portrait_styling': '📸 인물 스타일',
+      'game_animation': '🎮 게임/애니메이션',
+      'image_editing': '🛠️ 이미지 편집',
+      'creative_transform': '✨ 창의적 변환'
+    };
+    const categoryName = categoryNames[category] || category;
+
+    // Fetch templates by category
+    const { data: templates, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('category', category)
+      .eq('is_active', true)
+      .order('priority', { ascending: false });
+
+    if (error || !templates) {
+      await ctx.reply(`❌ ${categoryName} 카테고리를 불러오는 중 오류가 발생했습니다.`);
+      return;
+    }
+
+    // Pagination settings
+    const templatesPerPage = 6;
+    const totalPages = Math.ceil(templates.length / templatesPerPage);
+    const start = page * templatesPerPage;
+    const end = start + templatesPerPage;
+    const pageTemplates = templates.slice(start, end);
+
+    // Create keyboard
+    const keyboard = new InlineKeyboard();
+
+    // Add template buttons (2 rows of 3)
+    for (let i = 0; i < pageTemplates.length; i += 3) {
+      const row = pageTemplates.slice(i, i + 3);
+      row.forEach(template => {
+        const emoji = getCategoryEmoji(template.category);
+        keyboard.text(
+          `${emoji} ${template.template_name_ko}`,
+          `t:${template.template_key}:${fileKey}`
+        );
+      });
+      keyboard.row();
+    }
+
+    // Navigation buttons
+    keyboard.row();
+    if (page > 0) {
+      keyboard.text('⬅️ 이전', `catp:${category}:${page - 1}:${fileKey}`);
+    }
+    keyboard.text(`${page + 1}/${totalPages}`, `noop`);
+    if (page < totalPages - 1) {
+      keyboard.text('➡️ 다음', `catp:${category}:${page + 1}:${fileKey}`);
+    }
+
+    // Back button
+    keyboard.row();
+    keyboard.text('🔙 카테고리로', `back_to_main:${fileKey}`);
+
+    await ctx.editMessageText(
+      `🎨 **${categoryName}** (${page + 1}/${totalPages} 페이지)\n\n` +
+      `총 ${templates.length}개 스타일 중 선택:`,
+      { reply_markup: keyboard }
+    );
+
+  } catch (error) {
+    console.error('❌ Error in category pagination:', error);
+    await ctx.reply('❌ 페이지 이동 중 오류가 발생했습니다.');
+  }
+});
+
+// No-operation handler for page number display
+bot.callbackQuery('noop', async (ctx) => {
+  await ctx.answerCallbackQuery();
 });
 
 // Category selection handler
