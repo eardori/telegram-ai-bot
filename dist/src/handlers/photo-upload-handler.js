@@ -9,6 +9,7 @@ exports.handlePhotoUpload = handlePhotoUpload;
 exports.downloadImage = downloadImage;
 exports.getImageInfo = getImageInfo;
 const supabase_1 = require("../utils/supabase");
+const image_analysis_service_1 = require("../services/image-analysis-service");
 /**
  * Handle photo upload from user
  */
@@ -41,8 +42,13 @@ async function handlePhotoUpload(ctx) {
         const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
         const imageUrl = `https://api.telegram.org/file/bot${botToken}/${filePathOnTelegram}`;
         console.log('✅ Photo URL constructed:', imageUrl.substring(0, 80) + '...');
-        // Store upload session in database
-        const uploadSession = await storeUploadSession(ctx, fileId, imageUrl, fileSize);
+        // Analyze image with Gemini Vision
+        console.log('🔍 Analyzing image...');
+        const analysis = await (0, image_analysis_service_1.analyzeImage)(imageUrl);
+        const analysisSummary = (0, image_analysis_service_1.getAnalysisSummary)(analysis);
+        console.log('📊 Analysis result:', analysisSummary);
+        // Store upload session in database with analysis
+        const uploadSession = await storeUploadSession(ctx, fileId, imageUrl, fileSize, analysis);
         if (!uploadSession) {
             console.warn('⚠️ Failed to store upload session, but continuing...');
         }
@@ -50,7 +56,9 @@ async function handlePhotoUpload(ctx) {
             success: true,
             imageUrl,
             fileId,
-            fileSize
+            fileSize,
+            analysis,
+            analysisSummary
         };
     }
     catch (error) {
@@ -64,7 +72,7 @@ async function handlePhotoUpload(ctx) {
 /**
  * Store upload session in database for tracking
  */
-async function storeUploadSession(ctx, fileId, imageUrl, fileSize) {
+async function storeUploadSession(ctx, fileId, imageUrl, fileSize, analysis) {
     try {
         const { data, error } = await supabase_1.supabase
             .from('image_analysis_results')
@@ -76,9 +84,15 @@ async function storeUploadSession(ctx, fileId, imageUrl, fileSize) {
             image_urls: [imageUrl],
             image_sizes: [fileSize],
             total_size_bytes: fileSize,
+            face_count: analysis.faces.count,
+            detected_objects: analysis.objects,
+            scene_description: analysis.rawAnalysis,
+            dominant_colors: analysis.dominantColors,
+            composition_type: analysis.imageType,
             analysis_data: {
                 file_id: fileId,
-                status: 'uploaded'
+                status: 'analyzed',
+                ...analysis
             }
         });
         if (error) {

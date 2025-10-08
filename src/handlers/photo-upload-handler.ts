@@ -6,12 +6,15 @@
 
 import { Context } from 'grammy';
 import { supabase } from '../utils/supabase';
+import { analyzeImage, getAnalysisSummary, ImageAnalysisResult } from '../services/image-analysis-service';
 
 interface PhotoUploadResult {
   success: boolean;
   imageUrl?: string;
   fileId?: string;
   fileSize?: number;
+  analysis?: ImageAnalysisResult;
+  analysisSummary?: string;
   error?: string;
 }
 
@@ -55,8 +58,15 @@ export async function handlePhotoUpload(ctx: Context): Promise<PhotoUploadResult
 
     console.log('✅ Photo URL constructed:', imageUrl.substring(0, 80) + '...');
 
-    // Store upload session in database
-    const uploadSession = await storeUploadSession(ctx, fileId, imageUrl, fileSize);
+    // Analyze image with Gemini Vision
+    console.log('🔍 Analyzing image...');
+    const analysis = await analyzeImage(imageUrl);
+    const analysisSummary = getAnalysisSummary(analysis);
+
+    console.log('📊 Analysis result:', analysisSummary);
+
+    // Store upload session in database with analysis
+    const uploadSession = await storeUploadSession(ctx, fileId, imageUrl, fileSize, analysis);
 
     if (!uploadSession) {
       console.warn('⚠️ Failed to store upload session, but continuing...');
@@ -66,7 +76,9 @@ export async function handlePhotoUpload(ctx: Context): Promise<PhotoUploadResult
       success: true,
       imageUrl,
       fileId,
-      fileSize
+      fileSize,
+      analysis,
+      analysisSummary
     };
 
   } catch (error) {
@@ -85,7 +97,8 @@ async function storeUploadSession(
   ctx: Context,
   fileId: string,
   imageUrl: string,
-  fileSize: number
+  fileSize: number,
+  analysis: ImageAnalysisResult
 ): Promise<boolean> {
   try {
     const { data, error } = await supabase
@@ -98,9 +111,15 @@ async function storeUploadSession(
         image_urls: [imageUrl],
         image_sizes: [fileSize],
         total_size_bytes: fileSize,
+        face_count: analysis.faces.count,
+        detected_objects: analysis.objects,
+        scene_description: analysis.rawAnalysis,
+        dominant_colors: analysis.dominantColors,
+        composition_type: analysis.imageType,
         analysis_data: {
           file_id: fileId,
-          status: 'uploaded'
+          status: 'analyzed',
+          ...analysis
         }
       });
 

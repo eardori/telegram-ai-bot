@@ -881,20 +881,22 @@ bot.on('message:photo', async (ctx) => {
 
     console.log('✅ Photo processed successfully:', uploadResult.imageUrl);
 
-    // Send confirmation with quick actions
-    await ctx.reply(
+    // Send confirmation with analysis results
+    const message =
       `✅ **사진을 받았어요!**\n\n` +
-      `🔍 이제 어떻게 할까요?\n\n` +
-      `📸 편집 옵션:\n` +
-      `• /edit - AI 스타일 편집\n` +
-      `• 답장으로 "도비야 [요청]" - 직접 편집 요청\n\n` +
-      `🎨 또는 새로운 이미지를 생성하려면:\n` +
-      `• /create - 이미지 생성`,
-      { parse_mode: 'Markdown' }
-    );
+      `🔍 **분석 결과:**\n` +
+      `${uploadResult.analysisSummary || '분석 중...'}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `📸 **편집 옵션:**\n` +
+      `• /edit - AI 스타일 추천 편집\n` +
+      `• 답장으로 "도비야 [요청]" - 직접 편집\n\n` +
+      `🎨 **새로운 이미지 생성:**\n` +
+      `• /create - 텍스트로 이미지 생성`;
+
+    await ctx.reply(message, { parse_mode: 'Markdown' });
 
     // TODO: Next steps
-    // 1. Analyze image (face detection, objects, scene)
+    // 1. ✅ Analyze image (DONE)
     // 2. Recommend templates based on analysis
     // 3. Show inline buttons for template selection
 
