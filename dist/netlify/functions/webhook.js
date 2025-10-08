@@ -725,6 +725,9 @@ ${versionInfo}
 
 📋 **유용한 명령어:**
 • /help - 이 도움말 보기
+• /credits - 💳 크레딧 잔액 확인
+• /terms - 📜 이용 약관
+• /support - 💬 고객 지원
 • /version - 버전 히스토리
 • /apicost - API 사용량 및 비용 (관리자용)
 
@@ -2001,6 +2004,35 @@ bot.command('terms', async (ctx) => {
 
 마지막 업데이트: 2025년 1월`;
     await ctx.reply(termsMessage);
+});
+// Credits command - check credit balance
+bot.command('credits', async (ctx) => {
+    console.log('💳 Credits command received');
+    try {
+        const userId = ctx.from?.id;
+        if (!userId) {
+            await ctx.reply('❌ 사용자 정보를 확인할 수 없습니다.');
+            return;
+        }
+        const balanceMessage = await (0, image_edit_credit_wrapper_1.getCreditBalanceMessage)(userId);
+        // Add purchase button if credits are low
+        const { getCreditBalance } = await Promise.resolve().then(() => __importStar(require('../../src/services/credit-manager')));
+        const balance = await getCreditBalance(userId);
+        if (balance.total_credits < 5) {
+            const keyboard = await (0, purchase_ui_service_1.getCreditPackagesKeyboard)();
+            await ctx.reply(`${balanceMessage}\n\n⚠️ 크레딧이 부족합니다!\n💡 아래에서 충전하세요:`, {
+                parse_mode: 'Markdown',
+                reply_markup: keyboard
+            });
+        }
+        else {
+            await ctx.reply(balanceMessage, { parse_mode: 'Markdown' });
+        }
+    }
+    catch (error) {
+        console.error('❌ Error in credits command:', error);
+        await ctx.reply('❌ 크레딧 정보를 불러오는 중 오류가 발생했습니다.');
+    }
 });
 // Support command (required for Telegram Stars)
 bot.command('support', async (ctx) => {
