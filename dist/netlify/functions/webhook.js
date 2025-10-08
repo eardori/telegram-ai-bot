@@ -928,7 +928,7 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 `• /help 로 다른 기능 확인`);
             return;
         }
-        if (editResult.success && editResult.outputUrl) {
+        if (editResult.success && (editResult.outputUrl || editResult.outputFile)) {
             // Update processing message
             await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ **편집 완료!**\n\n` +
                 `🎨 스타일: ${template.template_name_ko}\n` +
@@ -941,7 +941,8 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
                 .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
             // Send edited image with action buttons
-            await ctx.replyWithPhoto(editResult.outputUrl, {
+            const photoSource = editResult.outputFile || editResult.outputUrl;
+            await ctx.replyWithPhoto(photoSource, {
                 caption: `✨ **${template.template_name_ko}** 스타일 편집 완료!\n\n` +
                     `📝 프롬프트: ${template.base_prompt.substring(0, 100)}...\n` +
                     `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요\n\n` +
@@ -951,7 +952,8 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                     `• 🎨 같은 스타일로 다시 편집할 수 있습니다`,
                 reply_markup: actionKeyboard
             });
-            // Store edit result in database
+            // Store edit result in database (only if URL is available)
+            const editedImageUrl = editResult.outputUrl || '(direct_file)';
             const { data: editRecord } = await supabase_1.supabase
                 .from('image_edit_results')
                 .insert({
@@ -959,7 +961,7 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 chat_id: ctx.chat?.id,
                 template_key: template.template_key,
                 original_image_url: imageUrl,
-                edited_image_url: editResult.outputUrl,
+                edited_image_url: editedImageUrl,
                 processing_time_ms: editResult.processingTime,
                 status: 'completed'
             })
@@ -1127,14 +1129,15 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
             templateName: template.template_name_ko,
             category: template.category
         });
-        if (editResult.success && editResult.outputUrl) {
+        if (editResult.success && (editResult.outputUrl || editResult.outputFile)) {
             await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ 편집 완료!`);
             const actionKeyboard = new grammy_1.InlineKeyboard()
                 .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
                 .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
                 .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
                 .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
-            await ctx.replyWithPhoto(editResult.outputUrl, {
+            const photoSource = editResult.outputFile || editResult.outputUrl;
+            await ctx.replyWithPhoto(photoSource, {
                 caption: `✨ **${template.template_name_ko}** 재편집 완료!`,
                 reply_markup: actionKeyboard
             });

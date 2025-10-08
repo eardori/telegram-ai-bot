@@ -8,10 +8,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.editImageWithTemplate = editImageWithTemplate;
 exports.editImageWithReplicate = editImageWithReplicate;
 const generative_ai_1 = require("@google/generative-ai");
+const nano_banafo_client_1 = require("./nano-banafo-client");
+const grammy_1 = require("grammy");
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const genAI = new generative_ai_1.GoogleGenerativeAI(GOOGLE_API_KEY);
+const geminiClient = new nano_banafo_client_1.NanoBanafoClient();
 /**
- * Edit image using Gemini vision model with template prompt
+ * Edit image using Gemini vision model with template prompt (NanoBanafoClient)
  */
 async function editImageWithTemplate(request) {
     const startTime = Date.now();
@@ -19,87 +22,39 @@ async function editImageWithTemplate(request) {
         console.log('🎨 Starting image editing with Gemini...');
         console.log(`📝 Template: ${request.templateName}`);
         console.log(`📋 Category: ${request.category}`);
-        // Download image
+        // Download image to buffer
         const imageResponse = await fetch(request.imageUrl);
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const imageBase64 = Buffer.from(imageBuffer).toString('base64');
-        console.log('✅ Image downloaded, size:', imageBuffer.byteLength, 'bytes');
-        // Use Gemini 2.0 Flash Exp for image generation
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-        // Create detailed editing prompt
+        if (!imageResponse.ok) {
+            throw new Error(`Failed to download image: ${imageResponse.status}`);
+        }
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
+        // Create enhanced editing prompt
         const editPrompt = `${request.templatePrompt}
 
 IMPORTANT INSTRUCTIONS:
 - Analyze the input image carefully
-- Apply the requested style transformation
+- Apply the requested style transformation precisely
 - Maintain the subject's identity and key features
 - Enhance quality while preserving important details
-- Create a visually appealing result
+- Create a visually appealing, high-quality result
 
-Please generate a transformed version of this image following the style description above.`;
-        console.log('🔄 Sending request to Gemini...');
-        // Generate edited image description (Gemini can't directly output images, so we describe the edit)
-        const result = await model.generateContent([
-            editPrompt,
-            {
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: imageBase64
-                }
-            }
-        ]);
-        const responseText = result.response.text();
-        console.log('📊 Gemini response:', responseText.substring(0, 200) + '...');
-        // Since Gemini Flash doesn't generate images directly, we need to use a different approach
-        // For now, we'll use Imagen 3 via the same API
-        return await generateEditedImageWithImagen(request, imageBase64);
+Generate the edited image following the style description above.`;
+        console.log('🔄 Sending request to Gemini via NanoBanafoClient...');
+        // Edit image using NanoBanafoClient (Gemini 2.5 Flash Image Preview)
+        const editedBuffer = await geminiClient.editImage(imageBuffer, editPrompt);
+        const processingTime = Date.now() - startTime;
+        console.log(`✅ Image editing completed in ${processingTime}ms`);
+        // Create InputFile from buffer for grammY
+        const outputFile = new grammy_1.InputFile(editedBuffer, `edited_${Date.now()}.jpg`);
+        return {
+            success: true,
+            outputFile,
+            processingTime
+        };
     }
     catch (error) {
         console.error('❌ Image editing error:', error);
-        const processingTime = Date.now() - startTime;
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            processingTime
-        };
-    }
-}
-/**
- * Generate edited image using Imagen 3 (Google's image generation model)
- */
-async function generateEditedImageWithImagen(request, imageBase64) {
-    const startTime = Date.now();
-    try {
-        console.log('🎨 Using Imagen 3 for image generation...');
-        // Use Imagen 3 model (newer and better quality)
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-        // Create image generation prompt based on template
-        const imageGenPrompt = `Create a high-quality image based on this description:
-
-${request.templatePrompt}
-
-Style: ${request.category}
-Quality: Professional, high-resolution
-Details: Photorealistic, well-composed, visually appealing
-
-Generate an image that matches this description perfectly.`;
-        console.log('🔄 Generating new image with Gemini...');
-        const result = await model.generateContent([imageGenPrompt]);
-        const responseText = result.response.text();
-        console.log('📊 Image generation response:', responseText);
-        // Note: Gemini currently doesn't directly output image files
-        // We need to use a different service for actual image generation
-        // For now, we'll return a placeholder and implement proper image generation later
-        const processingTime = Date.now() - startTime;
-        // TODO: Integrate with actual image generation service (Replicate, etc.)
-        return {
-            success: false,
-            error: 'Image generation not yet implemented - need to integrate image generation API',
-            processingTime
-        };
-    }
-    catch (error) {
-        console.error('❌ Imagen generation error:', error);
         const processingTime = Date.now() - startTime;
         return {
             success: false,
