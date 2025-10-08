@@ -1242,11 +1242,11 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       let message = `🎨 **${template.template_name_ko}**\n\n`;
       message += `📋 **${parameter.parameter_name_ko}**를 선택해주세요:\n\n`;
 
-      // Add option buttons (2 per row)
+      // Add option buttons (2 per row) - Remove emoji from button text
       parameter.options.forEach((option, index) => {
         paramKeyboard.text(
-          `${option.emoji || '•'} ${option.option_name_ko}`,
-          `param:${templateKey}:${parameter.parameter_key}:${option.option_key}:${fileKey}`
+          option.option_name_ko,  // No emoji
+          `param:${templateKey}:${parameter.parameter_key}:${option.option_key}:${chatId}:${messageId}`
         );
 
         // Create new row every 2 buttons
@@ -1256,7 +1256,7 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       });
 
       // Back button
-      paramKeyboard.text('🔙 뒤로가기', `back_to_main:${fileKey}`);
+      paramKeyboard.text('뒤로가기', `back_to_main:${chatId}:${messageId}`);
 
       await ctx.reply(message, {
         parse_mode: 'Markdown',
@@ -2808,7 +2808,7 @@ bot.on('message:text', async (ctx) => {
             message += `${index + 1}. **${suggestion.title}**\n`;
             message += `   ${suggestion.description}\n\n`;
 
-            keyboard.text(`✨ ${suggestion.title}`, `ai:${index}:${fileKey}`);
+            keyboard.text(suggestion.title, `ai:${index}:${fileKey}`);
             if ((index + 1) % 2 === 0 || index === aiSuggestions.length - 1) {
               keyboard.row();
             }
@@ -2828,24 +2828,24 @@ bot.on('message:text', async (ctx) => {
 
           message += `\n💡 **아래 버튼을 눌러 스타일을 선택하세요:**\n`;
 
-          // Add template buttons
+          // Add template buttons (no emoji)
           uploadResult.recommendations.slice(0, 4).forEach(rec => {
-            keyboard.text(`${rec.emoji} ${rec.nameKo}`, `t:${rec.templateKey}:${fileKey}`).row();
+            keyboard.text(rec.nameKo, `t:${rec.templateKey}:${fileKey}`).row();
           });
         }
 
-        // Add category buttons
+        // Add category buttons (no emoji)
         keyboard.row();
-        keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`)
-          .text('📸 인물 스타일', `cat:portrait_styling:${fileKey}`)
-          .text('🎮 게임/애니', `cat:game_animation:${fileKey}`);
+        keyboard.text('3D/피규어', `cat:3d_figurine:${fileKey}`)
+          .text('인물 스타일', `cat:portrait_styling:${fileKey}`)
+          .text('게임/애니', `cat:game_animation:${fileKey}`);
         keyboard.row();
-        keyboard.text('🛠️ 이미지 편집', `cat:image_editing:${fileKey}`)
-          .text('✨ 창의적 변환', `cat:creative_transform:${fileKey}`);
+        keyboard.text('이미지 편집', `cat:image_editing:${fileKey}`)
+          .text('창의적 변환', `cat:creative_transform:${fileKey}`);
 
         // Add "View All" button
         keyboard.row();
-        keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
+        keyboard.text('전체 38개 스타일 보기', `t:all:${fileKey}`);
 
         await ctx.reply(message, {
           parse_mode: 'Markdown',
