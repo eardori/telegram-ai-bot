@@ -28,6 +28,65 @@ export interface ImageEditResult {
 }
 
 /**
+ * Get category-specific enhancement instructions
+ */
+function getCategoryInstructions(category: string): string {
+  const instructions: Record<string, string> = {
+    '3d_figurine': `
+CATEGORY-SPECIFIC INSTRUCTIONS (3D Figurine):
+- Transform into miniature figurine aesthetic (Nendoroid, Funko Pop, or clay figure style)
+- Use clean, simple background (solid color or subtle gradient)
+- Apply toy/plastic material appearance with slight sheen
+- Simplify facial features while keeping them recognizable
+- Add characteristic large head and small body proportions (if full-body)
+- Maintain cute, stylized appearance
+- Preserve distinctive clothing and accessories in simplified form`,
+
+    'portrait_styling': `
+CATEGORY-SPECIFIC INSTRUCTIONS (Portrait Styling):
+- Maintain photorealistic quality throughout
+- Enhance lighting and composition professionally
+- Keep natural skin tones and textures
+- Preserve subject's identity 100%
+- Apply professional photo studio techniques
+- Enhance without over-processing
+- Maintain natural expressions and features`,
+
+    'game_animation': `
+CATEGORY-SPECIFIC INSTRUCTIONS (Game/Animation):
+- Apply stylized character art aesthetic (game character or anime style)
+- Use vibrant, saturated colors with high contrast
+- Add characteristic animation/game art shading and highlights
+- Maintain recognizable facial features in stylized form
+- Apply clean line work and cel-shading if appropriate
+- Create dynamic, appealing character design
+- Keep background simple or thematic to character`,
+
+    'image_editing': `
+CATEGORY-SPECIFIC INSTRUCTIONS (Image Editing):
+- Apply requested edits precisely and realistically
+- Maintain photorealistic quality
+- Blend changes naturally with original image
+- Preserve overall image quality and resolution
+- Ensure edited areas match lighting and perspective
+- Keep unedited areas unchanged
+- Create seamless, professional result`,
+
+    'creative_transform': `
+CATEGORY-SPECIFIC INSTRUCTIONS (Creative Transform):
+- Apply creative artistic interpretation
+- Use unique visual style appropriate to theme
+- Maintain subject recognition while being creative
+- Add artistic flair and personality
+- Balance creativity with clarity
+- Create visually striking result
+- Preserve key identifying features`
+  };
+
+  return instructions[category] || '';
+}
+
+/**
  * Edit image using Gemini vision model with template prompt (NanoBanafoClient)
  */
 export async function editImageWithTemplate(request: ImageEditRequest): Promise<ImageEditResult> {
@@ -47,17 +106,26 @@ export async function editImageWithTemplate(request: ImageEditRequest): Promise<
     const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
     console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
 
-    // Create enhanced editing prompt
+    // Create enhanced editing prompt with category-specific instructions
+    const categoryInstructions = getCategoryInstructions(request.category);
     const editPrompt = `${request.templatePrompt}
 
-IMPORTANT INSTRUCTIONS:
-- Analyze the input image carefully
-- Apply the requested style transformation precisely
-- Maintain the subject's identity and key features
-- Enhance quality while preserving important details
-- Create a visually appealing, high-quality result
+${categoryInstructions}
 
-Generate the edited image following the style description above.`;
+QUALITY REQUIREMENTS:
+- High resolution output (1024x1024 or better)
+- Sharp details and clear focus
+- Professional color grading
+- No artifacts or distortions
+- Balanced composition
+
+SUBJECT PRESERVATION:
+- Keep facial features recognizable
+- Maintain body proportions naturally
+- Preserve distinctive characteristics
+- Natural pose and expression
+
+Generate the edited image following all instructions above.`;
 
     console.log('🔄 Sending request to Gemini via NanoBanafoClient...');
 
