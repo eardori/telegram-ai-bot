@@ -1,15 +1,20 @@
 # 📝 CLAUDE.md - 개발 컨텍스트 문서
 
-## 🎯 프로젝트 상태 (2025-01-08)
+## 🎯 프로젝트 상태 (2025-10-08)
 
-### 현재 프로젝트: Pixie 업그레이드
-**목표**: MultifulDobi → Pixie로 진화
-**상세 계획**: `docs/PIXIE_MIGRATION_PLAN.md` (필독!)
-**PRD 문서**: `Pixie - PRD.md`
+### 🚨 최우선 프로젝트: 이미지 편집 기능 개선
+**우선순위**: 최고 (세션 기억 기능보다 우선)
+**상세 계획**: `docs/IMAGE_EDIT_IMPROVEMENT_PLAN.md` (필독!)
+**현재 상태**: Gemini API 연동 완료, 기본 기능 작동 확인 ✅
 
 ### ⚡ 작업 순서 (사용자 승인)
-1. **Phase 5: 세션 수정** (1-2시간) ← 먼저 진행
-2. **Phase 1: 프롬프트 + Replicate** (2-3일)
+1. ✅ **Gemini API 전환** - 완료 (2025-10-08)
+2. ⏳ **이미지 편집 기능 개선** - Week 1 진행 중
+   - 템플릿 다양성 테스트
+   - 프롬프트 최적화
+   - UI/UX 개선 (카테고리, 페이지네이션)
+   - API 비용 추적
+3. 🔜 **세션 기억 기능** - 이후 진행 예정
 
 ### 🆕 Replicate 통합 추가 (2025-01-08)
 **목적**: NSFW 이미지/비디오 생성 기능
@@ -56,8 +61,26 @@ npm install --save-dev @types/replicate
 
 ## 🚨 최우선 해결 과제
 
-### 1. 세션 기억 기능 미작동 이슈 ✅ 해결 완료! (2025-01-08)
-**상태**: 🟢 해결됨
+### 1. 이미지 편집 기능 개선 (2025-10-08 진행 중)
+**상태**: 🟡 진행 중
+**커밋**: 7b6969a (Gemini API 전환 완료)
+**상세 계획**: `docs/IMAGE_EDIT_IMPROVEMENT_PLAN.md`
+
+**완료된 사항**:
+- ✅ Replicate → Gemini 전환 완료
+- ✅ 폴라로이드 템플릿 테스트 성공
+- ✅ InputFile 방식으로 직접 전송
+- ✅ 에러 핸들링 개선
+
+**진행 중**:
+- ⏳ 다른 템플릿들 테스트
+- ⏳ 프롬프트 최적화
+- ⏳ 카테고리별 UI 구현
+- ⏳ 페이지네이션 개선
+- ⏳ API 비용 추적
+
+### 2. 세션 기억 기능 미작동 이슈 (보류)
+**상태**: 🔵 보류 (이미지 편집 우선)
 **커밋**: 80ca066
 **해결 방법**: 인메모리 대화 컨텍스트 관리 시스템 구현
 
@@ -396,10 +419,17 @@ git push origin v1.0.0-phase1
 
 ## 🔄 업데이트 로그
 
+### 2025년 10월 8일
+- 🎨 **이미지 편집 기능 개선 프로젝트 시작**
+- ✅ Replicate → Gemini API 전환 완료
+- ✅ 폴라로이드 템플릿 테스트 성공
+- 📄 IMAGE_EDIT_IMPROVEMENT_PLAN.md 작성
+- 📝 CLAUDE.md 업데이트 (이미지 우선순위 반영)
+- 🎯 우선순위 변경: 이미지 편집 > 세션 기억
+
 ### 2025년 1월 7일
 - 🎯 Pixie 업그레이드 프로젝트 시작
 - 📄 PIXIE_MIGRATION_PLAN.md 작성
-- 📝 CLAUDE.md 업데이트
 - ✅ 템플릿 불일치 문제 해결
 
 ### 2024년 12월
@@ -416,35 +446,45 @@ git push origin v1.0.0-phase1
 
 ---
 
-## 🎯 다음 작업
+## 🎯 다음 작업 (이미지 편집 개선)
 
-### 즉시 시작 가능
-1. **Phase 1 시작**: 프롬프트 관리 시스템
-   ```bash
-   mkdir -p src/data/prompts/{core,experimental,seasonal}
-   ```
+### Week 1: 즉시 시작 가능
+1. ✅ **"전체 38개 스타일 보기" 핸들러 검증**
+   - 버튼 존재 확인 완료
+   - 핸들러 구현 여부 확인 필요
 
-2. **38개 프롬프트를 JSON으로 변환**
-   - `sql/009_insert_prompt_templates.sql` 참고
-   - 5개 카테고리 파일 생성
+2. ⏳ **템플릿 다양성 테스트**
+   - 리듬게임 캐릭터
+   - 의상 교체
+   - 표정 변경
+   - 넨도로이드
+   - 밤 인물사진
 
-3. **PromptManager 클래스 구현**
-   - `src/services/prompt-manager.ts`
+3. ⏳ **프롬프트 최적화 구현**
+   - 카테고리별 특화 지시사항 추가
+   - 이미지 분석 결과 활용
+   - 품질 제어 파라미터 강화
 
-4. **관리자 명령어 구현**
-   - `src/handlers/admin-handler.ts`
+### Week 2: UI/UX 및 추적
+4. ⏳ **카테고리별 분류 UI**
+   - 카테고리 버튼 추가
+   - 카테고리 핸들러 구현
+
+5. ⏳ **페이지네이션 개선**
+   - 6개씩 표시 (2 rows × 3)
+   - 이전/다음 버튼
+   - 페이지 번호 표시
+
+6. ⏳ **Gemini API 비용 추적**
+   - API 사용 로그 테이블 생성
+   - 비용 계산 함수 구현
+   - 관리자 대시보드 명령어
 
 ### 작업 순서
-Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6
-
-각 Phase 완료 후:
-1. Git commit + tag
-2. 테스트
-3. CLAUDE.md 진행률 업데이트
-4. 다음 Phase 시작
+상세 계획: `docs/IMAGE_EDIT_IMPROVEMENT_PLAN.md` 참고
 
 ---
 
-*최종 수정: 2025년 1월 7일*
-*다음 작업: Phase 1 시작*
-*상세 계획: docs/PIXIE_MIGRATION_PLAN.md 참고*
+*최종 수정: 2025년 10월 8일*
+*다음 작업: "전체 스타일 보기" 핸들러 검증*
+*상세 계획: docs/IMAGE_EDIT_IMPROVEMENT_PLAN.md 참고*
