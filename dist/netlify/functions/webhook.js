@@ -876,6 +876,28 @@ function storeAISuggestions(fileKey, suggestions) {
 function getAISuggestions(fileKey) {
     return aiSuggestionsCache.get(fileKey);
 }
+const callbackDataCache = new Map();
+let callbackIdCounter = 0;
+/**
+ * Generate short callback ID and store the data
+ * Format: param:{shortId} (e.g., "param:a1b2c3")
+ */
+function generateShortCallbackId(data) {
+    // Generate 6-character alphanumeric ID
+    const shortId = (callbackIdCounter++).toString(36).padStart(6, '0');
+    callbackDataCache.set(shortId, data);
+    // Auto-cleanup after 1 hour
+    setTimeout(() => {
+        callbackDataCache.delete(shortId);
+    }, 60 * 60 * 1000);
+    return shortId;
+}
+/**
+ * Resolve short callback ID to original data
+ */
+function resolveCallbackData(shortId) {
+    return callbackDataCache.get(shortId);
+}
 // AI Suggestion selection callback handler (NEW!)
 bot.callbackQuery(/^ai:(\d+):(.+):(.+)$/, async (ctx) => {
     try {
@@ -1049,8 +1071,17 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
             message += `📋 **${parameter.parameter_name_ko}**를 선택해주세요:\n\n`;
             // Add option buttons (2 per row) - Remove emoji from button text
             parameter.options.forEach((option, index) => {
+                // Generate short callback ID to avoid 64-byte limit
+                const shortId = generateShortCallbackId({
+                    templateKey,
+                    parameterKey: parameter.parameter_key,
+                    optionKey: option.option_key,
+                    chatId,
+                    messageId
+                });
                 paramKeyboard.text(option.option_name_ko, // No emoji
-                `param:${templateKey}:${parameter.parameter_key}:${option.option_key}:${chatId}:${messageId}`);
+                `p:${shortId}` // Ultra-short format: "p:a1b2c3"
+                );
                 // Create new row every 2 buttons
                 if ((index + 1) % 2 === 0 || index === parameter.options.length - 1) {
                     paramKeyboard.row();
@@ -1167,15 +1198,19 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
     }
 });
 // ✨ Parameter selection callback handler (for parameterized templates)
-bot.callbackQuery(/^param:([^:]+):([^:]+):([^:]+):(.+):(.+)$/, async (ctx) => {
+// NEW: Uses short ID format "p:{shortId}" to avoid 64-byte limit
+bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
     try {
-        const templateKey = ctx.match[1];
-        const parameterKey = ctx.match[2];
-        const optionKey = ctx.match[3];
-        const chatId = parseInt(ctx.match[4]);
-        const messageId = parseInt(ctx.match[5]);
+        const shortId = ctx.match[1];
+        // Resolve short ID to original data
+        const callbackData = resolveCallbackData(shortId);
+        if (!callbackData) {
+            await ctx.answerCallbackQuery('세션이 만료되었습니다. 사진을 다시 업로드해주세요.');
+            return;
+        }
+        const { templateKey, parameterKey, optionKey, chatId, messageId } = callbackData;
         const fileKey = `${chatId}:${messageId}`;
-        console.log(`🎯 Parameter selected:`, {
+        console.log(`🎯 Parameter selected (short ID: ${shortId}):`, {
             template: templateKey,
             parameter: parameterKey,
             option: optionKey,
