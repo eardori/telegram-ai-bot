@@ -57,6 +57,7 @@ const tracking_types_1 = require("../../src/types/tracking.types");
 const version_manager_1 = require("../../src/utils/version-manager");
 // Import image editing handlers
 const image_edit_handler_1 = require("../../src/handlers/image-edit-handler");
+const photo_upload_handler_1 = require("../../src/handlers/photo-upload-handler");
 // Import Replicate service
 const replicate_service_1 = require("../../src/services/replicate-service");
 // Import Supabase
@@ -751,6 +752,37 @@ ${versionInfo}
 "도비야"라고 불러주시면 즉시 달려갑니다! 🏃‍♂️✨`;
     }
 }
+// =============================================================================
+// 📸 PHOTO UPLOAD HANDLER - New Photo Editing Flow
+// =============================================================================
+bot.on('message:photo', async (ctx) => {
+    try {
+        console.log('📸 Photo received from user');
+        // Handle photo upload
+        const uploadResult = await (0, photo_upload_handler_1.handlePhotoUpload)(ctx);
+        if (!uploadResult.success) {
+            await ctx.reply(`❌ 사진 처리 중 오류가 발생했습니다.\n\n${uploadResult.error}`);
+            return;
+        }
+        console.log('✅ Photo processed successfully:', uploadResult.imageUrl);
+        // Send confirmation with quick actions
+        await ctx.reply(`✅ **사진을 받았어요!**\n\n` +
+            `🔍 이제 어떻게 할까요?\n\n` +
+            `📸 편집 옵션:\n` +
+            `• /edit - AI 스타일 편집\n` +
+            `• 답장으로 "도비야 [요청]" - 직접 편집 요청\n\n` +
+            `🎨 또는 새로운 이미지를 생성하려면:\n` +
+            `• /create - 이미지 생성`, { parse_mode: 'Markdown' });
+        // TODO: Next steps
+        // 1. Analyze image (face detection, objects, scene)
+        // 2. Recommend templates based on analysis
+        // 3. Show inline buttons for template selection
+    }
+    catch (error) {
+        console.error('❌ Error in photo handler:', error);
+        await ctx.reply('❌ 사진 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+    }
+});
 // Bot commands
 bot.command('start', async (ctx) => {
     console.log('📨 Start command received');
