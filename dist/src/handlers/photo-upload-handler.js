@@ -10,6 +10,7 @@ exports.downloadImage = downloadImage;
 exports.getImageInfo = getImageInfo;
 const supabase_1 = require("../utils/supabase");
 const image_analysis_service_1 = require("../services/image-analysis-service");
+const template_recommendation_service_1 = require("../services/template-recommendation-service");
 /**
  * Handle photo upload from user
  */
@@ -47,6 +48,9 @@ async function handlePhotoUpload(ctx) {
         const analysis = await (0, image_analysis_service_1.analyzeImage)(imageUrl);
         const analysisSummary = (0, image_analysis_service_1.getAnalysisSummary)(analysis);
         console.log('📊 Analysis result:', analysisSummary);
+        // Get template recommendations based on analysis
+        console.log('🎯 Getting template recommendations...');
+        const recommendations = await (0, template_recommendation_service_1.getTemplateRecommendations)(analysis, 5);
         // Store upload session in database with analysis
         const uploadSession = await storeUploadSession(ctx, fileId, imageUrl, fileSize, analysis);
         if (!uploadSession) {
@@ -58,7 +62,8 @@ async function handlePhotoUpload(ctx) {
             fileId,
             fileSize,
             analysis,
-            analysisSummary
+            analysisSummary,
+            recommendations
         };
     }
     catch (error) {

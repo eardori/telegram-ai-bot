@@ -881,23 +881,33 @@ bot.on('message:photo', async (ctx) => {
 
     console.log('✅ Photo processed successfully:', uploadResult.imageUrl);
 
-    // Send confirmation with analysis results
-    const message =
-      `✅ **사진을 받았어요!**\n\n` +
-      `🔍 **분석 결과:**\n` +
-      `${uploadResult.analysisSummary || '분석 중...'}\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `📸 **편집 옵션:**\n` +
-      `• /edit - AI 스타일 추천 편집\n` +
-      `• 답장으로 "도비야 [요청]" - 직접 편집\n\n` +
-      `🎨 **새로운 이미지 생성:**\n` +
-      `• /create - 텍스트로 이미지 생성`;
+    // Build message with analysis and recommendations
+    let message = `✅ **사진을 받았어요!**\n\n`;
+    message += `🔍 **분석 결과:**\n${uploadResult.analysisSummary || '분석 중...'}\n\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    // Add recommendations
+    if (uploadResult.recommendations && uploadResult.recommendations.length > 0) {
+      message += `🎯 **추천 스타일** (적합도 순):\n\n`;
+
+      uploadResult.recommendations.slice(0, 4).forEach((rec, index) => {
+        const stars = '⭐'.repeat(Math.ceil(rec.confidence / 25));
+        message += `${rec.emoji} **${rec.nameKo}** ${stars}\n`;
+        message += `   ↳ ${rec.reason} (${rec.confidence}%)\n\n`;
+      });
+
+      message += `\n💡 버튼을 눌러 선택하거나 /edit 명령어를 사용하세요!\n`;
+    } else {
+      message += `📸 **편집 옵션:**\n`;
+      message += `• /edit - AI 스타일 편집\n`;
+      message += `• 답장으로 "도비야 [요청]" - 직접 편집\n`;
+    }
 
     await ctx.reply(message, { parse_mode: 'Markdown' });
 
     // TODO: Next steps
     // 1. ✅ Analyze image (DONE)
-    // 2. Recommend templates based on analysis
+    // 2. ✅ Recommend templates (DONE)
     // 3. Show inline buttons for template selection
 
   } catch (error) {

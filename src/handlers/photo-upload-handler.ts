@@ -7,6 +7,7 @@
 import { Context } from 'grammy';
 import { supabase } from '../utils/supabase';
 import { analyzeImage, getAnalysisSummary, ImageAnalysisResult } from '../services/image-analysis-service';
+import { getTemplateRecommendations, TemplateRecommendation } from '../services/template-recommendation-service';
 
 interface PhotoUploadResult {
   success: boolean;
@@ -15,6 +16,7 @@ interface PhotoUploadResult {
   fileSize?: number;
   analysis?: ImageAnalysisResult;
   analysisSummary?: string;
+  recommendations?: TemplateRecommendation[];
   error?: string;
 }
 
@@ -65,6 +67,10 @@ export async function handlePhotoUpload(ctx: Context): Promise<PhotoUploadResult
 
     console.log('📊 Analysis result:', analysisSummary);
 
+    // Get template recommendations based on analysis
+    console.log('🎯 Getting template recommendations...');
+    const recommendations = await getTemplateRecommendations(analysis, 5);
+
     // Store upload session in database with analysis
     const uploadSession = await storeUploadSession(ctx, fileId, imageUrl, fileSize, analysis);
 
@@ -78,7 +84,8 @@ export async function handlePhotoUpload(ctx: Context): Promise<PhotoUploadResult
       fileId,
       fileSize,
       analysis,
-      analysisSummary
+      analysisSummary,
+      recommendations
     };
 
   } catch (error) {
