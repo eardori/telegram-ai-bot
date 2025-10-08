@@ -886,14 +886,25 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
                 `🎨 스타일: ${template.template_name_ko}\n` +
                 `⏱️ 처리 시간: ${Math.round(editResult.processingTime / 1000)}초\n\n` +
                 `결과를 전송합니다...`);
-            // Send edited image
+            // Create action buttons for the edited image
+            const actionKeyboard = new grammy_1.InlineKeyboard()
+                .text('🔄 다른 스타일 시도', `retry_edit:${fileId}`)
+                .text('💾 원본으로 돌아가기', `back_to_original:${fileId}`).row()
+                .text('🎨 다시 편집', `re_edit:${template.template_key}:${fileId}`)
+                .text('⭐ 이 스타일 평가', `rate_style:${template.template_key}`);
+            // Send edited image with action buttons
             await ctx.replyWithPhoto(editResult.outputUrl, {
                 caption: `✨ **${template.template_name_ko}** 스타일 편집 완료!\n\n` +
                     `📝 프롬프트: ${template.base_prompt.substring(0, 100)}...\n` +
-                    `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요`
+                    `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요\n\n` +
+                    `💡 **다음 액션:**\n` +
+                    `• 🔄 다른 스타일로 시도해보세요\n` +
+                    `• 💾 원본 이미지로 돌아갈 수 있습니다\n` +
+                    `• 🎨 같은 스타일로 다시 편집할 수 있습니다`,
+                reply_markup: actionKeyboard
             });
             // Store edit result in database
-            await supabase_1.supabase
+            const { data: editRecord } = await supabase_1.supabase
                 .from('image_edit_results')
                 .insert({
                 user_id: ctx.from?.id,
@@ -903,8 +914,10 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
                 edited_image_url: editResult.outputUrl,
                 processing_time_ms: editResult.processingTime,
                 status: 'completed'
-            });
-            console.log('✅ Edit result stored in database');
+            })
+                .select()
+                .single();
+            console.log('✅ Edit result stored in database:', editRecord?.id);
         }
         else {
             // Handle error
@@ -918,6 +931,147 @@ bot.callbackQuery(/^template:(.+):(.+)$/, async (ctx) => {
     catch (error) {
         console.error('❌ Error in template callback:', error);
         await ctx.reply('❌ 템플릿 선택 처리 중 오류가 발생했습니다.');
+    }
+});
+// Action button handlers for edited images
+// Retry edit with different style
+bot.callbackQuery(/^retry_edit:(.+)$/, async (ctx) => {
+    try {
+        const fileId = ctx.match[1];
+        await ctx.answerCallbackQuery();
+        // Get file and analysis
+        const file = await ctx.api.getFile(fileId);
+        if (!file.file_path) {
+            await ctx.reply('❌ 원본 이미지를 찾을 수 없습니다.');
+            return;
+        }
+        const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        // Re-run analysis and show recommendations
+        const { analyzeImage } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-analysis-service')));
+        const { getTemplateRecommendations } = await Promise.resolve().then(() => __importStar(require('../../src/services/template-recommendation-service')));
+        const analysis = await analyzeImage(imageUrl);
+        const recommendations = await getTemplateRecommendations(analysis, 5);
+        // Show new recommendations
+        let message = `🔄 **다른 스타일 추천**\n\n`;
+        const keyboard = new grammy_1.InlineKeyboard();
+        recommendations.slice(0, 4).forEach(rec => {
+            message += `${rec.emoji} ${rec.nameKo} (${rec.confidence}%)\n`;
+            keyboard.text(`${rec.emoji} ${rec.nameKo}`, `template:${rec.templateKey}:${fileId}`).row();
+        });
+        keyboard.text('🔍 전체 38개 스타일 보기', `template:view_all:${fileId}`);
+        await ctx.reply(message, { reply_markup: keyboard });
+    }
+    catch (error) {
+        console.error('❌ Error in retry_edit:', error);
+        await ctx.reply('❌ 다른 스타일 추천 중 오류가 발생했습니다.');
+    }
+});
+// Back to original image
+bot.callbackQuery(/^back_to_original:(.+)$/, async (ctx) => {
+    try {
+        const fileId = ctx.match[1];
+        await ctx.answerCallbackQuery('원본 이미지를 다시 전송합니다...');
+        const file = await ctx.api.getFile(fileId);
+        if (!file.file_path) {
+            await ctx.reply('❌ 원본 이미지를 찾을 수 없습니다.');
+            return;
+        }
+        const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        await ctx.replyWithPhoto(imageUrl, {
+            caption: '📸 **원본 이미지**\n\n다시 편집하시려면 위의 추천 버튼을 사용하세요.'
+        });
+    }
+    catch (error) {
+        console.error('❌ Error in back_to_original:', error);
+        await ctx.reply('❌ 원본 이미지 전송 중 오류가 발생했습니다.');
+    }
+});
+// Re-edit with same style
+bot.callbackQuery(/^re_edit:(.+):(.+)$/, async (ctx) => {
+    try {
+        const templateKey = ctx.match[1];
+        const fileId = ctx.match[2];
+        await ctx.answerCallbackQuery('같은 스타일로 다시 편집합니다...');
+        // Fetch template
+        const { data: template, error } = await supabase_1.supabase
+            .from('prompt_templates')
+            .select('*')
+            .eq('template_key', templateKey)
+            .single();
+        if (error || !template) {
+            await ctx.reply('❌ 템플릿을 찾을 수 없습니다.');
+            return;
+        }
+        // Get image URL
+        const file = await ctx.api.getFile(fileId);
+        if (!file.file_path) {
+            await ctx.reply('❌ 원본 이미지를 찾을 수 없습니다.');
+            return;
+        }
+        const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        // Execute editing (same logic as template selection)
+        const processingMsg = await ctx.reply(`🎨 **${template.template_name_ko}** 스타일로 다시 편집 중...\n\n` +
+            `⚡ 잠시만 기다려주세요...`);
+        const { editImageWithReplicate } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-edit-service')));
+        const editResult = await editImageWithReplicate({
+            imageUrl,
+            templatePrompt: template.base_prompt,
+            templateName: template.template_name_ko,
+            category: template.category
+        });
+        if (editResult.success && editResult.outputUrl) {
+            await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ 편집 완료!`);
+            const actionKeyboard = new grammy_1.InlineKeyboard()
+                .text('🔄 다른 스타일 시도', `retry_edit:${fileId}`)
+                .text('💾 원본으로 돌아가기', `back_to_original:${fileId}`).row()
+                .text('🎨 다시 편집', `re_edit:${template.template_key}:${fileId}`)
+                .text('⭐ 이 스타일 평가', `rate_style:${template.template_key}`);
+            await ctx.replyWithPhoto(editResult.outputUrl, {
+                caption: `✨ **${template.template_name_ko}** 재편집 완료!`,
+                reply_markup: actionKeyboard
+            });
+        }
+        else {
+            await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `❌ 편집 실패: ${editResult.error}`);
+        }
+    }
+    catch (error) {
+        console.error('❌ Error in re_edit:', error);
+        await ctx.reply('❌ 재편집 중 오류가 발생했습니다.');
+    }
+});
+// Rate style
+bot.callbackQuery(/^rate_style:(.+)$/, async (ctx) => {
+    try {
+        const templateKey = ctx.match[1];
+        await ctx.answerCallbackQuery();
+        const ratingKeyboard = new grammy_1.InlineKeyboard()
+            .text('⭐ 1점', `submit_rating:${templateKey}:1`)
+            .text('⭐⭐ 2점', `submit_rating:${templateKey}:2`)
+            .text('⭐⭐⭐ 3점', `submit_rating:${templateKey}:3`).row()
+            .text('⭐⭐⭐⭐ 4점', `submit_rating:${templateKey}:4`)
+            .text('⭐⭐⭐⭐⭐ 5점', `submit_rating:${templateKey}:5`);
+        await ctx.reply('⭐ **이 스타일을 평가해주세요:**\n\n별점을 선택하세요:', {
+            reply_markup: ratingKeyboard
+        });
+    }
+    catch (error) {
+        console.error('❌ Error in rate_style:', error);
+        await ctx.reply('❌ 평가 요청 중 오류가 발생했습니다.');
+    }
+});
+// Submit rating
+bot.callbackQuery(/^submit_rating:(.+):(\d+)$/, async (ctx) => {
+    try {
+        const templateKey = ctx.match[1];
+        const rating = parseInt(ctx.match[2]);
+        await ctx.answerCallbackQuery(`${rating}점으로 평가해주셔서 감사합니다! ⭐`);
+        // Store rating (optional - can add rating table later)
+        console.log(`📊 User ${ctx.from?.id} rated ${templateKey}: ${rating} stars`);
+        await ctx.reply(`✅ **평가 완료!**\n\n${templateKey} 스타일에 ${rating}점을 주셨습니다. 감사합니다! 🙏`);
+    }
+    catch (error) {
+        console.error('❌ Error in submit_rating:', error);
     }
 });
 // Helper function to get category emoji
