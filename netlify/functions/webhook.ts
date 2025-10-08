@@ -851,7 +851,6 @@ ${versionInfo}
 • /terms - 📜 이용 약관
 • /support - 💬 고객 지원
 • /version - 버전 히스토리
-• /apicost - API 사용량 및 비용 (관리자용)
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2442,10 +2441,30 @@ bot.command('start', async (ctx) => {
   await ctx.reply(helpMessage);
 });
 
-// Help command - shows same content as start
+// Help command - shows same content as start (with admin section if admin)
 bot.command('help', async (ctx) => {
   console.log('❓ Help command received');
-  const helpMessage = await getHelpMessage();
+
+  // Check if user is admin
+  const ADMIN_USER_IDS = process.env.ADMIN_USER_IDS?.split(',').map(id => parseInt(id)) || [];
+  const isAdmin = ADMIN_USER_IDS.includes(ctx.from?.id || 0);
+
+  let helpMessage = await getHelpMessage();
+
+  // Add admin section if user is admin
+  if (isAdmin) {
+    helpMessage += `\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    helpMessage += `🔧 **관리자 전용 명령어:**\n`;
+    helpMessage += `• /apicost - 💰 API 사용량 및 비용 통계\n`;
+    helpMessage += `• /whoami - 👤 User ID 확인\n`;
+    helpMessage += `• /track_start - 📊 대화 추적 시작\n`;
+    helpMessage += `• /track_stop - ⏹️ 대화 추적 중지\n`;
+    helpMessage += `• /track_status - 📈 추적 상태 확인\n`;
+    helpMessage += `• /summarize - 📝 대화 요약 생성\n`;
+    helpMessage += `• /health - 🏥 시스템 상태 확인\n`;
+    helpMessage += `• /maintenance - 🔧 유지보수 모드\n`;
+  }
+
   await ctx.reply(helpMessage);
 });
 
