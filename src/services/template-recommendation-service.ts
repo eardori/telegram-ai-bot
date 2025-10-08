@@ -146,6 +146,17 @@ function calculateTemplateScore(
   let confidence = 0;
   const reasons: string[] = [];
 
+  // ✅ FILTER: Check if user provided enough images
+  // Assume analysis is for single image (imageCount is always 1 from photo upload)
+  const userImageCount = 1;
+
+  if (template.min_images > userImageCount) {
+    return {
+      confidence: 0,
+      reason: `${template.min_images}개 이미지 필요 (현재 ${userImageCount}개)`
+    };
+  }
+
   // Check face requirements
   if (template.requires_face) {
     if (analysis.faces.count === 0) {
