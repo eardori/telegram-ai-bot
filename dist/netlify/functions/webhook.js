@@ -909,9 +909,9 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
             category: template.category,
             prompt: template.base_prompt.substring(0, 100) + '...'
         });
-        // Execute image editing with Replicate
-        const { editImageWithReplicate } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-edit-service')));
-        const editResult = await editImageWithReplicate({
+        // Execute image editing with Gemini
+        const { editImageWithTemplate } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-edit-service')));
+        const editResult = await editImageWithTemplate({
             imageUrl,
             templatePrompt: template.base_prompt,
             templateName: template.template_name_ko,
@@ -1122,8 +1122,8 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
         // Execute editing (same logic as template selection)
         const processingMsg = await ctx.reply(`🎨 **${template.template_name_ko}** 스타일로 다시 편집 중...\n\n` +
             `⚡ 잠시만 기다려주세요...`);
-        const { editImageWithReplicate } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-edit-service')));
-        const editResult = await editImageWithReplicate({
+        const { editImageWithTemplate } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-edit-service')));
+        const editResult = await editImageWithTemplate({
             imageUrl,
             templatePrompt: template.base_prompt,
             templateName: template.template_name_ko,

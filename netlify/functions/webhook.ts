@@ -1069,10 +1069,10 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       prompt: template.base_prompt.substring(0, 100) + '...'
     });
 
-    // Execute image editing with Replicate
-    const { editImageWithReplicate } = await import('../../src/services/image-edit-service');
+    // Execute image editing with Gemini
+    const { editImageWithTemplate } = await import('../../src/services/image-edit-service');
 
-    const editResult = await editImageWithReplicate({
+    const editResult = await editImageWithTemplate({
       imageUrl,
       templatePrompt: template.base_prompt,
       templateName: template.template_name_ko,
@@ -1341,9 +1341,9 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
       `⚡ 잠시만 기다려주세요...`
     );
 
-    const { editImageWithReplicate } = await import('../../src/services/image-edit-service');
+    const { editImageWithTemplate } = await import('../../src/services/image-edit-service');
 
-    const editResult = await editImageWithReplicate({
+    const editResult = await editImageWithTemplate({
       imageUrl,
       templatePrompt: template.base_prompt,
       templateName: template.template_name_ko,
