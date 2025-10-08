@@ -155,6 +155,7 @@ class TemplateMatcher {
                 }
                 break;
             case 'outfit_swap':
+            case 'outfit_styling':
             case 'clothing_change':
                 // Bonus if clothing detected
                 const hasClothing = analysis.detectedObjects.some(obj => obj.name.toLowerCase().includes('clothing') ||

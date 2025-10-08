@@ -90,6 +90,9 @@ export class SuggestionEngine implements ISuggestionEngine {
         'figurine_commercial': 30,
         'portrait_styling_redcarpet': 25,
         'quality_enhance': 20,
+        'outfit_styling': 18,  // NEW: Parameterized outfit styling
+        'background_replace': 17,  // Parameterized background change
+        'expression_change': 16,  // Parameterized expression change
         'vintage_portrait': 15,
         'black_white_dramatic': 15,
         'portrait_styling_paris': 10,
