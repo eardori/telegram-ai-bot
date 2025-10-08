@@ -12,6 +12,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
 
+export interface AISuggestion {
+  title: string;          // Creative title in Korean (5-10 chars)
+  description: string;    // Why this would be amazing (1 sentence)
+  prompt: string;         // Full Gemini editing prompt ready to use
+  style: string;          // Artistic style or category
+}
+
 export interface ImageAnalysisResult {
   // Face detection
   faces: {
@@ -36,6 +43,13 @@ export interface ImageAnalysisResult {
   // Color analysis
   dominantColors?: string[];
 
+  // Mood and context
+  mood?: 'happy' | 'serious' | 'playful' | 'dramatic' | 'neutral';
+  backgroundComplexity?: 'simple' | 'moderate' | 'busy';
+
+  // AI Creative Suggestions (NEW!)
+  aiSuggestions: AISuggestion[];
+
   // Raw analysis text
   rawAnalysis: string;
 }
@@ -54,25 +68,52 @@ export async function analyzeImage(imageUrl: string): Promise<ImageAnalysisResul
     const imageBuffer = await imageResponse.arrayBuffer();
     const imageBase64 = Buffer.from(imageBuffer).toString('base64');
 
-    // Create analysis prompt
-    const prompt = `Analyze this image in detail and provide a JSON response with the following structure:
+    // Create enhanced analysis prompt with AI suggestions
+    const prompt = `You are an expert photo analyst for a creative AI photo editing service.
 
+Analyze this image in detail and provide a JSON response with TWO main sections:
+
+1. STRUCTURED DATA (for template matching):
 {
-  "faceCount": <number of faces detected>,
-  "faceClarity": "high" | "medium" | "low",
-  "facePositions": [array of positions like "center", "left", "right"],
-  "scene": "indoor" | "outdoor" | "studio" | "unknown",
-  "objects": [array of detected objects],
-  "bodyVisible": true | false (is full body or most of body visible?),
-  "clothingClear": true | false (are clothes clearly visible?),
-  "imageType": "portrait" | "full_body" | "landscape" | "object" | "group",
-  "lighting": "natural" | "artificial" | "mixed" | "poor",
-  "quality": "high" | "medium" | "low",
-  "dominantColors": [array of 3-5 dominant colors as hex codes],
-  "description": "brief description of the image"
+  "structuredData": {
+    "faceCount": <number>,
+    "faceClarity": "high" | "medium" | "low",
+    "facePositions": ["center", "left", "right"],
+    "scene": "indoor" | "outdoor" | "studio" | "unknown",
+    "objects": [array of detected objects],
+    "bodyVisible": true | false,
+    "clothingVisible": true | false,
+    "imageType": "portrait" | "full_body" | "landscape" | "object" | "group",
+    "lighting": "natural" | "artificial" | "mixed" | "poor",
+    "quality": "high" | "medium" | "low",
+    "mood": "happy" | "serious" | "playful" | "dramatic" | "neutral",
+    "backgroundComplexity": "simple" | "moderate" | "busy",
+    "dominantColors": ["#hex1", "#hex2", "#hex3"],
+    "description": "brief technical description"
+  }
 }
 
-Be precise and analytical. Focus on technical details that would help with photo editing recommendations.`;
+2. AI CREATIVE SUGGESTIONS (unique editing ideas for THIS specific image):
+{
+  "aiSuggestions": [
+    {
+      "title": "한글 제목 (5-10자)",
+      "description": "왜 이 편집이 멋질지 한 문장으로 설명",
+      "prompt": "Create an edited version of this image: [FULL detailed editing instruction ready for Gemini image generation. Be specific about style, mood, lighting, colors, effects. At least 3-4 sentences describing the transformation.]",
+      "style": "vintage | dramatic | artistic | playful | professional | fantasy"
+    }
+    // Provide exactly 3 creative suggestions tailored to THIS image
+  ]
+}
+
+IMPORTANT for AI Suggestions:
+- Make them UNIQUE and SPECIFIC to this image
+- Each prompt must be a COMPLETE instruction ready for AI image generation
+- Think creatively: vintage film, watercolor painting, dramatic lighting, anime style, etc.
+- Prompts should be in English and detailed (3-4+ sentences)
+- Titles and descriptions in Korean
+
+Return the complete JSON with both sections.`;
 
     const result = await model.generateContent([
       prompt,
@@ -85,7 +126,7 @@ Be precise and analytical. Focus on technical details that would help with photo
     ]);
 
     const responseText = result.response.text();
-    console.log('📊 Gemini analysis response:', responseText);
+    console.log('📊 Gemini analysis response:', responseText.substring(0, 500) + '...');
 
     // Parse JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -94,30 +135,43 @@ Be precise and analytical. Focus on technical details that would help with photo
     }
 
     const analysisData = JSON.parse(jsonMatch[0]);
+    const structured = analysisData.structuredData || analysisData; // Fallback for old format
 
     // Map to our interface
     const analysis: ImageAnalysisResult = {
       faces: {
-        count: analysisData.faceCount || 0,
-        clarity: analysisData.faceClarity || 'low',
-        positions: analysisData.facePositions || []
+        count: structured.faceCount || 0,
+        clarity: structured.faceClarity || 'low',
+        positions: structured.facePositions || []
       },
-      scene: analysisData.scene || 'unknown',
-      objects: analysisData.objects || [],
-      bodyVisible: analysisData.bodyVisible || false,
-      clothingClear: analysisData.clothingClear || false,
-      imageType: analysisData.imageType || 'portrait',
-      lighting: analysisData.lighting || 'natural',
-      quality: analysisData.quality || 'medium',
-      dominantColors: analysisData.dominantColors || [],
-      rawAnalysis: analysisData.description || responseText
+      scene: structured.scene || 'unknown',
+      objects: structured.objects || [],
+      bodyVisible: structured.bodyVisible || false,
+      clothingClear: structured.clothingVisible || structured.clothingClear || false,
+      imageType: structured.imageType || 'portrait',
+      lighting: structured.lighting || 'natural',
+      quality: structured.quality || 'medium',
+      mood: structured.mood || 'neutral',
+      backgroundComplexity: structured.backgroundComplexity || 'moderate',
+      dominantColors: structured.dominantColors || [],
+      aiSuggestions: analysisData.aiSuggestions || [],
+      rawAnalysis: structured.description || responseText
     };
 
     console.log('✅ Image analysis complete:', {
       faces: analysis.faces.count,
       scene: analysis.scene,
-      type: analysis.imageType
+      type: analysis.imageType,
+      aiSuggestions: analysis.aiSuggestions.length
     });
+
+    // Log AI suggestions
+    if (analysis.aiSuggestions.length > 0) {
+      console.log('✨ AI Suggestions:');
+      analysis.aiSuggestions.forEach((suggestion, idx) => {
+        console.log(`  ${idx + 1}. ${suggestion.title} (${suggestion.style})`);
+      });
+    }
 
     return analysis;
 
@@ -134,6 +188,10 @@ Be precise and analytical. Focus on technical details that would help with photo
       imageType: 'portrait',
       lighting: 'natural',
       quality: 'medium',
+      mood: 'neutral',
+      backgroundComplexity: 'moderate',
+      dominantColors: [],
+      aiSuggestions: [],
       rawAnalysis: 'Analysis failed: ' + (error instanceof Error ? error.message : 'Unknown error')
     };
   }

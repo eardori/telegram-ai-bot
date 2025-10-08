@@ -74,8 +74,35 @@ export async function getTemplateRecommendations(
   // Sort by confidence (highest first)
   recommendations.sort((a, b) => b.confidence - a.confidence);
 
-  // Return top N
-  const topRecommendations = recommendations.slice(0, limit);
+  // Apply diversity: Select top recommendations with category diversity
+  const diverseRecommendations: TemplateRecommendation[] = [];
+  const usedCategories = new Set<string>();
+
+  for (const rec of recommendations) {
+    // Add if category not yet used, or if we need to fill remaining slots
+    if (!usedCategories.has(rec.category) || diverseRecommendations.length >= limit - 2) {
+      diverseRecommendations.push(rec);
+      usedCategories.add(rec.category);
+
+      if (diverseRecommendations.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  // If we still need more, add remaining high-confidence ones
+  if (diverseRecommendations.length < limit) {
+    for (const rec of recommendations) {
+      if (!diverseRecommendations.includes(rec)) {
+        diverseRecommendations.push(rec);
+        if (diverseRecommendations.length >= limit) {
+          break;
+        }
+      }
+    }
+  }
+
+  const topRecommendations = diverseRecommendations;
 
   console.log(`✅ Generated ${topRecommendations.length} recommendations`);
   topRecommendations.forEach(rec => {

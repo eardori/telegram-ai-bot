@@ -31,6 +31,7 @@ import { getVersionInfoForHelp, getFormattedVersionHistory } from '../../src/uti
 // Import image editing handlers
 import { registerImageEditHandlers } from '../../src/handlers/image-edit-handler';
 import { handlePhotoUpload } from '../../src/handlers/photo-upload-handler';
+import { editImageWithTemplate } from '../../src/services/image-edit-service';
 
 // Import Replicate service
 import { replicateService } from '../../src/services/replicate-service';
@@ -881,60 +882,78 @@ bot.on('message:photo', async (ctx) => {
 
     console.log('✅ Photo processed successfully:', uploadResult.imageUrl);
 
-    // Build message with analysis and recommendations
+    // Build message with analysis and AI suggestions
     let message = `✅ **사진을 받았어요!**\n\n`;
     message += `🔍 **분석 결과:**\n${uploadResult.analysisSummary || '분석 중...'}\n\n`;
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // Add recommendations with inline buttons
+    // Store file ID in cache with short key
+    const fileKey = storeFileId(ctx.chat!.id, ctx.message!.message_id, uploadResult.fileId!);
+
+    // Create inline keyboard
+    const keyboard = new InlineKeyboard();
+
+    // Add AI Suggestions first (if available)
+    const aiSuggestions = uploadResult.analysis?.aiSuggestions || [];
+    if (aiSuggestions.length > 0) {
+      // Store AI suggestions in cache for callback handler
+      storeAISuggestions(fileKey, aiSuggestions);
+      message += `✨ **AI 추천 (이 사진만을 위한 특별 제안):**\n\n`;
+
+      aiSuggestions.forEach((suggestion, index) => {
+        message += `${index + 1}. **${suggestion.title}**\n`;
+        message += `   ${suggestion.description}\n\n`;
+
+        // Add AI suggestion buttons (top rows)
+        keyboard.text(
+          `✨ ${suggestion.title}`,
+          `ai:${index}:${fileKey}`
+        );
+        if ((index + 1) % 2 === 0 || index === aiSuggestions.length - 1) {
+          keyboard.row();
+        }
+      });
+
+      message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    }
+
+    // Add template recommendations
     if (uploadResult.recommendations && uploadResult.recommendations.length > 0) {
-      message += `🎯 **추천 스타일** (적합도 순):\n\n`;
+      message += `🎯 **템플릿 추천** (적합도 순):\n\n`;
 
       uploadResult.recommendations.slice(0, 4).forEach((rec, index) => {
         const stars = '⭐'.repeat(Math.ceil(rec.confidence / 25));
-        message += `${rec.emoji} **${rec.nameKo}** ${stars}\n`;
-        message += `   ↳ ${rec.reason} (${rec.confidence}%)\n\n`;
+        message += `${rec.emoji} ${rec.nameKo} ${stars}\n`;
       });
 
       message += `\n💡 **아래 버튼을 눌러 스타일을 선택하세요:**\n`;
 
-      // Store file ID in cache with short key
-      const fileKey = storeFileId(ctx.chat!.id, ctx.message!.message_id, uploadResult.fileId!);
-
-      // Create inline keyboard with template buttons
-      const keyboard = new InlineKeyboard();
-
+      // Add template buttons
       uploadResult.recommendations.slice(0, 4).forEach(rec => {
         keyboard.text(
           `${rec.emoji} ${rec.nameKo}`,
           `t:${rec.templateKey}:${fileKey}`
         ).row();
       });
-
-      // Add category buttons (2 rows of 3, then 1 row of 2)
-      keyboard.row();
-      keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`)
-        .text('📸 인물 스타일', `cat:portrait_styling:${fileKey}`)
-        .text('🎮 게임/애니', `cat:game_animation:${fileKey}`);
-      keyboard.row();
-      keyboard.text('🛠️ 이미지 편집', `cat:image_editing:${fileKey}`)
-        .text('✨ 창의적 변환', `cat:creative_transform:${fileKey}`);
-
-      // Add "View All" button
-      keyboard.row();
-      keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
-
-      await ctx.reply(message, {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard
-      });
-    } else {
-      message += `📸 **편집 옵션:**\n`;
-      message += `• /edit - AI 스타일 편집\n`;
-      message += `• 답장으로 "도비야 [요청]" - 직접 편집\n`;
-
-      await ctx.reply(message, { parse_mode: 'Markdown' });
     }
+
+    // Add category buttons (2 rows of 3, then 1 row of 2)
+    keyboard.row();
+    keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`)
+      .text('📸 인물 스타일', `cat:portrait_styling:${fileKey}`)
+      .text('🎮 게임/애니', `cat:game_animation:${fileKey}`);
+    keyboard.row();
+    keyboard.text('🛠️ 이미지 편집', `cat:image_editing:${fileKey}`)
+      .text('✨ 창의적 변환', `cat:creative_transform:${fileKey}`);
+
+    // Add "View All" button
+    keyboard.row();
+    keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
+
+    await ctx.reply(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
 
     // TODO: Next steps
     // 1. ✅ Analyze image (DONE)
@@ -952,8 +971,9 @@ bot.on('message:photo', async (ctx) => {
 // CALLBACK QUERY HANDLERS (Inline Buttons)
 // =============================================================================
 
-// In-memory storage for file IDs (session-based)
+// In-memory storage for file IDs and AI suggestions (session-based)
 const fileIdCache = new Map<string, string>();
+const aiSuggestionsCache = new Map<string, any[]>();
 
 function storeFileId(chatId: number, messageId: number, fileId: string): string {
   const key = `${chatId}:${messageId}`;
@@ -964,6 +984,98 @@ function storeFileId(chatId: number, messageId: number, fileId: string): string 
 function getFileId(key: string): string | undefined {
   return fileIdCache.get(key);
 }
+
+function storeAISuggestions(fileKey: string, suggestions: any[]): void {
+  aiSuggestionsCache.set(fileKey, suggestions);
+}
+
+function getAISuggestions(fileKey: string): any[] | undefined {
+  return aiSuggestionsCache.get(fileKey);
+}
+
+// AI Suggestion selection callback handler (NEW!)
+bot.callbackQuery(/^ai:(\d+):(.+):(.+)$/, async (ctx) => {
+  try {
+    const suggestionIndex = parseInt(ctx.match[1]);
+    const chatId = parseInt(ctx.match[2]);
+    const messageId = parseInt(ctx.match[3]);
+    const fileKey = `${chatId}:${messageId}`;
+
+    console.log(`✨ AI Suggestion ${suggestionIndex} selected for file: ${fileKey}`);
+
+    // Get AI suggestions from cache
+    const suggestions = getAISuggestions(fileKey);
+    if (!suggestions || !suggestions[suggestionIndex]) {
+      await ctx.answerCallbackQuery('AI 제안 정보를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+      return;
+    }
+
+    const suggestion = suggestions[suggestionIndex];
+
+    // Get file ID
+    let fileId = getFileId(fileKey);
+    if (!fileId) {
+      // Try retrieving from database
+      const { data, error } = await supabase
+        .from('image_analysis_results')
+        .select('analysis_data')
+        .eq('message_id', messageId)
+        .single();
+
+      if (error || !data || !data.analysis_data?.file_id) {
+        await ctx.answerCallbackQuery('이미지 정보를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+        return;
+      }
+
+      fileId = data.analysis_data.file_id;
+      storeFileId(chatId, messageId, fileId);
+    }
+
+    // Answer callback
+    await ctx.answerCallbackQuery(`✨ ${suggestion.title} - 편집 중...`);
+
+    // Get image URL
+    const file = await ctx.api.getFile(fileId);
+    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
+    const imageUrl = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+
+    // Send processing message
+    const processingMsg = await ctx.reply(`🎨 **AI 추천으로 편집 중...**\n\n✨ ${suggestion.title}\n${suggestion.description}\n\n⏳ 잠시만 기다려주세요...`);
+
+    // Edit image using AI suggestion prompt
+    const editResult = await editImageWithTemplate({
+      imageUrl,
+      templatePrompt: suggestion.prompt,
+      templateName: suggestion.title,
+      category: 'ai_suggestion',
+      userId: ctx.from?.id,
+      chatId: ctx.chat?.id,
+      templateKey: `ai_${suggestionIndex}`
+    });
+
+    if (editResult.success && editResult.outputFile) {
+      // Delete processing message
+      await ctx.api.deleteMessage(ctx.chat!.id, processingMsg.message_id);
+
+      // Send edited image
+      await ctx.replyWithPhoto(editResult.outputFile, {
+        caption: `✨ **AI 추천: ${suggestion.title}**\n\n${suggestion.description}\n\n⏱️ 처리 시간: ${(editResult.processingTime! / 1000).toFixed(1)}초`
+      });
+
+      console.log(`✅ AI suggestion edit completed in ${editResult.processingTime}ms`);
+    } else {
+      await ctx.api.editMessageText(
+        ctx.chat!.id,
+        processingMsg.message_id,
+        `❌ 편집 실패: ${editResult.error}`
+      );
+    }
+
+  } catch (error) {
+    console.error('❌ Error in AI suggestion handler:', error);
+    await ctx.reply('❌ AI 추천 편집 중 오류가 발생했습니다.');
+  }
+});
 
 // Template selection callback handler
 bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
