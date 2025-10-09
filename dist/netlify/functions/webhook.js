@@ -720,6 +720,7 @@ ${versionInfo}
 📋 **유용한 명령어:**
 • /help - 이 도움말 보기
 • /credits - 💳 크레딧 잔액 확인
+• /referral - 🎁 친구 초대하고 크레딧 받기
 • /terms - 📜 이용 약관
 • /support - 💬 고객 지원
 • /version - 버전 히스토리
@@ -1895,6 +1896,22 @@ bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
 bot.callbackQuery('noop', async (ctx) => {
     await ctx.answerCallbackQuery();
 });
+// Show credits callback - from referral page
+bot.callbackQuery('show_credits', async (ctx) => {
+    try {
+        await ctx.answerCallbackQuery();
+        const userId = ctx.from?.id;
+        if (!userId) {
+            return;
+        }
+        const balanceMessage = await (0, image_edit_credit_wrapper_1.getCreditBalanceMessage)(userId);
+        await ctx.reply(balanceMessage, { parse_mode: 'Markdown' });
+    }
+    catch (error) {
+        console.error('❌ Error in show_credits callback:', error);
+        await ctx.answerCallbackQuery('오류가 발생했습니다.');
+    }
+});
 // Category selection handler
 bot.callbackQuery(/^cat:([^:]+):(.+):(.+)$/, async (ctx) => {
     try {
@@ -2007,8 +2024,63 @@ bot.command('apicost', async (ctx) => {
 // Bot commands
 bot.command('start', async (ctx) => {
     console.log('📨 Start command received');
-    const helpMessage = await getHelpMessage();
-    await ctx.reply(helpMessage);
+    try {
+        const userId = ctx.from?.id;
+        const username = ctx.from?.username;
+        if (!userId) {
+            await ctx.reply('❌ 사용자 정보를 가져올 수 없습니다.');
+            return;
+        }
+        // Check for referral code in /start parameter
+        const startPayload = ctx.match; // Gets the text after /start
+        if (startPayload) {
+            // Handle different types of deep links
+            if (startPayload.startsWith('ref_')) {
+                // Referral code: /start ref_MULTI12345
+                const referralCode = startPayload.substring(4); // Remove 'ref_' prefix
+                console.log(`🎁 Referral code detected: ${referralCode}`);
+                // Import referral service dynamically
+                const { processReferral, formatReferredWelcome, formatReferrerNotification, getUserIdByReferralCode } = await Promise.resolve().then(() => __importStar(require('../../src/services/referral-service')));
+                // Process the referral
+                const result = await processReferral(referralCode, userId);
+                if (result.success) {
+                    // Send welcome message to referred user
+                    await ctx.reply(formatReferredWelcome(result.referredReward || 10));
+                    // Notify referrer
+                    const referrerId = await getUserIdByReferralCode(referralCode);
+                    if (referrerId) {
+                        try {
+                            await bot.api.sendMessage(referrerId, formatReferrerNotification(username || `사용자 ${userId}`, result.referrerReward || 10));
+                        }
+                        catch (error) {
+                            console.warn('⚠️ Could not notify referrer:', error);
+                        }
+                    }
+                }
+                else {
+                    // Show error but still show help message
+                    await ctx.reply(`⚠️ ${result.message}\n\n아래 도움말을 확인하세요:`);
+                }
+            }
+            else if (startPayload === 'group_signup') {
+                // Group free trial signup: /start group_signup
+                console.log('🎁 Group free trial signup');
+                await ctx.reply(`🎉 **가입을 환영합니다!**\n\n` +
+                    `그룹에서 무료 체험 후 가입하셨네요!\n` +
+                    `가입 보상으로 5 크레딧을 받으셨습니다.\n\n` +
+                    `💡 친구를 초대하면 더 많은 크레딧을 받을 수 있습니다:\n` +
+                    `/referral 명령어로 확인하세요! 🚀`);
+            }
+        }
+        // Show help message
+        const helpMessage = await getHelpMessage();
+        await ctx.reply(helpMessage);
+    }
+    catch (error) {
+        console.error('❌ Error in start command:', error);
+        const helpMessage = await getHelpMessage();
+        await ctx.reply(helpMessage);
+    }
 });
 // Help command - shows same content as start (with admin section if admin)
 bot.command('help', async (ctx) => {
@@ -2215,6 +2287,42 @@ bot.command('credits', async (ctx) => {
     catch (error) {
         console.error('❌ Error in credits command:', error);
         await ctx.reply('❌ 크레딧 정보를 불러오는 중 오류가 발생했습니다.');
+    }
+});
+// Referral command - show referral code and statistics
+bot.command('referral', async (ctx) => {
+    console.log('🎁 Referral command received');
+    try {
+        const userId = ctx.from?.id;
+        const botUsername = ctx.me.username;
+        if (!userId) {
+            await ctx.reply('❌ 사용자 정보를 확인할 수 없습니다.');
+            return;
+        }
+        // Import referral service
+        const { getReferralStats, formatReferralMessage, generateReferralLink } = await Promise.resolve().then(() => __importStar(require('../../src/services/referral-service')));
+        // Get referral statistics
+        const stats = await getReferralStats(userId);
+        if (!stats) {
+            await ctx.reply('❌ 추천 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');
+            return;
+        }
+        // Format and send message
+        const message = formatReferralMessage(stats, botUsername);
+        const referralLink = generateReferralLink(stats.referralCode, botUsername);
+        // Create share button
+        const keyboard = new grammy_1.InlineKeyboard()
+            .url('친구에게 공유하기', `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(`🎁 Multiful AI 봇에 가입하고 10 크레딧을 무료로 받으세요!\n\n✨ AI 이미지 편집, 다양한 스타일 변환\n🚀 지금 바로 시작하세요!`)}`)
+            .row()
+            .text('내 크레딧 확인', 'show_credits');
+        await ctx.reply(message, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboard
+        });
+    }
+    catch (error) {
+        console.error('❌ Error in referral command:', error);
+        await ctx.reply('❌ 추천 정보를 불러오는 중 오류가 발생했습니다.');
     }
 });
 // Support command (required for Telegram Stars)
