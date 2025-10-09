@@ -302,6 +302,13 @@ if (!BOT_TOKEN) {
 const bot = new Bot(BOT_TOKEN || 'dummy-token-for-build');
 
 // =============================================================================
+// USER STATE MANAGEMENT (for multi-step flows)
+// =============================================================================
+
+// User state for admin prompt input flow
+const userStates = new Map<number, string>();
+
+// =============================================================================
 // CONVERSATION CONTEXT MANAGEMENT
 // =============================================================================
 
@@ -2749,6 +2756,24 @@ bot.command('admin', async (ctx) => {
         await notifyUserCreditGrant(bot, targetUserId, amount, reason);
       }
 
+    } else if (subcommand === 'prompt:add') {
+      // /admin prompt:add
+      await ctx.reply(
+        '📝 **새 프롬프트 추가**\n\n' +
+        '프롬프트 텍스트를 입력해주세요.\n' +
+        '(여러 줄 입력 가능)\n\n' +
+        '예시:\n' +
+        '```\n' +
+        'Create a professional business card design with the person from this photo. ' +
+        'Include name, title, and contact information in a modern, clean layout.\n' +
+        '```\n\n' +
+        '입력을 취소하려면 /cancel 을 입력하세요.',
+        { parse_mode: 'Markdown' }
+      );
+
+      // Set user state to awaiting prompt input
+      userStates.set(userId, 'awaiting_prompt_input');
+
     } else {
       // Unknown subcommand
       await ctx.reply(
@@ -2756,7 +2781,8 @@ bot.command('admin', async (ctx) => {
         `**사용 가능한 명령어:**\n` +
         `• \`/admin\` 또는 \`/admin dashboard [24h|7d|30d]\` - 대시보드\n` +
         `• \`/admin user:search <user_id>\` - 사용자 검색\n` +
-        `• \`/admin credit:grant <user_id> <amount> <reason>\` - 크레딧 지급`,
+        `• \`/admin credit:grant <user_id> <amount> <reason>\` - 크레딧 지급\n` +
+        `• \`/admin prompt:add\` - 새 프롬프트 추가`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -2764,6 +2790,137 @@ bot.command('admin', async (ctx) => {
   } catch (error) {
     console.error('❌ Error in admin command:', error);
     await ctx.reply(`❌ 관리자 명령 실행 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+});
+
+/**
+ * Cancel command - Cancel any ongoing admin flow
+ */
+bot.command('cancel', async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+
+  const currentState = userStates.get(userId);
+  if (currentState) {
+    userStates.delete(userId);
+    await ctx.reply('✅ 입력이 취소되었습니다.');
+  } else {
+    await ctx.reply('취소할 진행 중인 작업이 없습니다.');
+  }
+});
+
+/**
+ * Message handler for prompt input (admin flow)
+ */
+bot.on('message:text', async (ctx, next) => {
+  const userId = ctx.from?.id;
+  if (!userId) return next();
+
+  const userState = userStates.get(userId);
+
+  // Check if user is in prompt input state
+  if (userState === 'awaiting_prompt_input') {
+    const ADMIN_USER_IDS = process.env.ADMIN_USER_IDS?.split(',').map(id => parseInt(id)) || [];
+
+    if (!ADMIN_USER_IDS.includes(userId)) {
+      userStates.delete(userId);
+      return next();
+    }
+
+    const rawPrompt = ctx.message.text;
+
+    try {
+      await ctx.reply('🔄 프롬프트를 분석 중입니다... (5-10초 소요)');
+
+      const {
+        analyzePromptWithLLM,
+        saveAnalysisToQueue,
+        formatAnalysisResult
+      } = await import('../../src/services/prompt-analysis-service');
+
+      // LLM 분석
+      const analysis = await analyzePromptWithLLM(rawPrompt);
+
+      // 대기열에 저장
+      const queueId = await saveAnalysisToQueue(userId, rawPrompt, analysis);
+
+      // 결과 표시
+      const message = formatAnalysisResult(analysis);
+
+      const { InlineKeyboard } = await import('grammy');
+      const keyboard = new InlineKeyboard()
+        .text('✅ 승인하고 저장', `approve_prompt:${queueId}`)
+        .row()
+        .text('❌ 거부', `reject_prompt:${queueId}`);
+
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+
+      // Clear state
+      userStates.delete(userId);
+
+    } catch (error) {
+      console.error('❌ Error analyzing prompt:', error);
+      await ctx.reply(
+        '❌ 프롬프트 분석 중 오류가 발생했습니다.\n\n' +
+        `오류: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+        '다시 시도하려면 /admin prompt:add 를 입력하세요.'
+      );
+      userStates.delete(userId);
+    }
+
+    return; // Don't call next() - we handled this message
+  }
+
+  // Pass to next handler if not in special state
+  return next();
+});
+
+/**
+ * Callback: Approve prompt
+ */
+bot.callbackQuery(/^approve_prompt:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+
+  const queueId = parseInt(ctx.match[1]);
+  const userId = ctx.from?.id || 0;
+
+  try {
+    const { saveAnalysisAsTemplate, formatTemplateSavedMessage } =
+      await import('../../src/services/prompt-analysis-service');
+
+    const templateKey = await saveAnalysisAsTemplate(queueId, userId);
+
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+    await ctx.reply(formatTemplateSavedMessage(templateKey), { parse_mode: 'Markdown' });
+
+  } catch (error) {
+    console.error('❌ Error saving prompt:', error);
+    await ctx.reply(`❌ 저장 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+});
+
+/**
+ * Callback: Reject prompt
+ */
+bot.callbackQuery(/^reject_prompt:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+
+  const queueId = parseInt(ctx.match[1]);
+  const userId = ctx.from?.id || 0;
+
+  try {
+    const { rejectAnalysis } = await import('../../src/services/prompt-analysis-service');
+    await rejectAnalysis(queueId, userId, 'Rejected by admin');
+
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+    await ctx.reply('❌ 프롬프트가 거부되었습니다.');
+
+  } catch (error) {
+    console.error('❌ Error rejecting prompt:', error);
+    await ctx.reply('❌ 오류가 발생했습니다.');
   }
 });
 
