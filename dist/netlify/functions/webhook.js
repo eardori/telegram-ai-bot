@@ -721,6 +721,7 @@ ${versionInfo}
 • /help - 이 도움말 보기
 • /credits - 💳 크레딧 잔액 확인
 • /referral - 🎁 친구 초대하고 크레딧 받기
+• /enter_code - 🔑 추천 코드 입력하기
 • /terms - 📜 이용 약관
 • /support - 💬 고객 지원
 • /version - 버전 히스토리
@@ -2310,11 +2311,22 @@ bot.command('referral', async (ctx) => {
         // Format and send message
         const message = formatReferralMessage(stats, botUsername);
         const referralLink = generateReferralLink(stats.referralCode, botUsername);
+        // Check if user already has a referrer (show different button)
+        const { supabase } = await Promise.resolve().then(() => __importStar(require('../../src/utils/supabase')));
+        const { data: hasReferrer } = await supabase
+            .from('referrals')
+            .select('id')
+            .eq('referred_user_id', userId)
+            .single();
         // Create share button
         const keyboard = new grammy_1.InlineKeyboard()
             .url('친구에게 공유하기', `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(`🎁 Multiful AI 봇에 가입하고 10 크레딧을 무료로 받으세요!\n\n✨ AI 이미지 편집, 다양한 스타일 변환\n🚀 지금 바로 시작하세요!`)}`)
             .row()
             .text('내 크레딧 확인', 'show_credits');
+        // Add "Enter referral code" button only if user doesn't have a referrer yet
+        if (!hasReferrer) {
+            keyboard.row().text('추천 코드 입력하기', 'enter_referral_code');
+        }
         await ctx.reply(message, {
             parse_mode: 'Markdown',
             reply_markup: keyboard
@@ -2323,6 +2335,93 @@ bot.command('referral', async (ctx) => {
     catch (error) {
         console.error('❌ Error in referral command:', error);
         await ctx.reply('❌ 추천 정보를 불러오는 중 오류가 발생했습니다.');
+    }
+});
+// Enter referral code button handler
+bot.callbackQuery('enter_referral_code', async (ctx) => {
+    try {
+        await ctx.answerCallbackQuery();
+        const userId = ctx.from?.id;
+        if (!userId) {
+            return;
+        }
+        // Check if user already has a referrer
+        const { supabase } = await Promise.resolve().then(() => __importStar(require('../../src/utils/supabase')));
+        const { data: existing } = await supabase
+            .from('referrals')
+            .select('id')
+            .eq('referred_user_id', userId)
+            .single();
+        if (existing) {
+            await ctx.reply('❌ 이미 추천인이 등록되어 있습니다.\n\n한 번만 추천 코드를 사용할 수 있습니다.');
+            return;
+        }
+        await ctx.reply('🔑 **추천 코드 입력**\n\n' +
+            '친구에게 받은 추천 코드를 입력하세요.\n' +
+            '(예: MULTI12345)\n\n' +
+            '💡 **사용법:**\n' +
+            '`/enter_code MULTI12345`\n\n' +
+            '또는 친구가 보낸 링크를 클릭해도 됩니다!', { parse_mode: 'Markdown' });
+    }
+    catch (error) {
+        console.error('❌ Error in enter_referral_code callback:', error);
+        await ctx.answerCallbackQuery('오류가 발생했습니다.');
+    }
+});
+// Process manual referral code input
+bot.command('enter_code', async (ctx) => {
+    console.log('🔑 Processing referral code input');
+    try {
+        const userId = ctx.from?.id;
+        const username = ctx.from?.username;
+        const commandText = ctx.message?.text || '';
+        const args = commandText.split(' ').slice(1);
+        if (!userId) {
+            await ctx.reply('❌ 사용자 정보를 확인할 수 없습니다.');
+            return;
+        }
+        // Check if code was provided
+        if (args.length === 0) {
+            await ctx.reply('🔑 **추천 코드를 입력하세요**\n\n' +
+                '**사용법:** `/enter_code MULTI12345`\n\n' +
+                '💡 친구에게 받은 추천 코드를 공백 뒤에 입력하세요.\n\n' +
+                '예시:\n' +
+                '`/enter_code MULTI12345`', { parse_mode: 'Markdown' });
+            return;
+        }
+        const referralCode = args[0].toUpperCase();
+        // Validate format
+        if (!referralCode.startsWith('MULTI') || referralCode.length !== 10) {
+            await ctx.reply('❌ **잘못된 코드 형식입니다**\n\n' +
+                '추천 코드는 `MULTI` + 5자리 숫자 형식입니다.\n' +
+                '(예: MULTI12345)\n\n' +
+                '다시 확인 후 입력해주세요.', { parse_mode: 'Markdown' });
+            return;
+        }
+        // Process referral
+        const { processReferral, formatReferredWelcome, formatReferrerNotification, getUserIdByReferralCode } = await Promise.resolve().then(() => __importStar(require('../../src/services/referral-service')));
+        const result = await processReferral(referralCode, userId);
+        if (result.success) {
+            // Send welcome message to referred user
+            await ctx.reply(formatReferredWelcome(result.referredReward || 10));
+            // Notify referrer
+            const referrerId = await getUserIdByReferralCode(referralCode);
+            if (referrerId) {
+                try {
+                    await bot.api.sendMessage(referrerId, formatReferrerNotification(username || `사용자 ${userId}`, result.referrerReward || 10));
+                }
+                catch (error) {
+                    console.warn('⚠️ Could not notify referrer:', error);
+                }
+            }
+        }
+        else {
+            await ctx.reply(`❌ ${result.message}`);
+        }
+    }
+    catch (error) {
+        console.error('❌ Error processing referral code:', error);
+        await ctx.reply('❌ 추천 코드 처리 중 오류가 발생했습니다.');
     }
 });
 // Support command (required for Telegram Stars)
