@@ -1199,7 +1199,16 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 `⏱️ 처리 시간: ${Math.round(editResult.processingTime / 1000)}초\n\n` +
                 `결과를 전송합니다...`);
             // Create action buttons for the edited image
-            const actionKeyboard = new grammy_1.InlineKeyboard()
+            let actionKeyboard = new grammy_1.InlineKeyboard();
+            // If free trial, add signup button first
+            if (creditCheck.isFreeTrial) {
+                const botUsername = ctx.me.username;
+                actionKeyboard = actionKeyboard
+                    .url('🚀 지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
+                    .row();
+            }
+            // Add standard action buttons
+            actionKeyboard = actionKeyboard
                 .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
                 .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
                 .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
@@ -1632,7 +1641,17 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
                 console.error('❌ Failed to deduct credit:', deductResult.message);
             }
             await ctx.api.editMessageText(ctx.chat.id, processingMsg.message_id, `✅ 편집 완료!`);
-            const actionKeyboard = new grammy_1.InlineKeyboard()
+            // Create action buttons
+            let actionKeyboard = new grammy_1.InlineKeyboard();
+            // If free trial, add signup button first
+            if (creditCheck.isFreeTrial) {
+                const botUsername = ctx.me.username;
+                actionKeyboard = actionKeyboard
+                    .url('🚀 지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
+                    .row();
+            }
+            // Add standard action buttons
+            actionKeyboard = actionKeyboard
                 .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
                 .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
                 .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
@@ -1954,15 +1973,20 @@ bot.command('help', async (ctx) => {
     // Add admin section if user is admin
     if (isAdmin) {
         helpMessage += `\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        helpMessage += `🔧 **관리자 전용 명령어:**\n`;
+        helpMessage += `🔧 **관리자 전용 명령어:**\n\n`;
+        helpMessage += `**대시보드 및 관리:**\n`;
+        helpMessage += `• /admin - 📊 통합 대시보드 (24h/7d/30d)\n`;
+        helpMessage += `• /admin user:search <id> - 🔍 사용자 검색\n`;
+        helpMessage += `• /admin credit:grant <id> <amount> <reason> - 💳 크레딧 지급\n\n`;
+        helpMessage += `**시스템 모니터링:**\n`;
         helpMessage += `• /apicost - 💰 API 사용량 및 비용 통계\n`;
         helpMessage += `• /whoami - 👤 User ID 확인\n`;
+        helpMessage += `• /health - 🏥 시스템 상태 확인\n\n`;
+        helpMessage += `**대화 추적:**\n`;
         helpMessage += `• /track_start - 📊 대화 추적 시작\n`;
         helpMessage += `• /track_stop - ⏹️ 대화 추적 중지\n`;
         helpMessage += `• /track_status - 📈 추적 상태 확인\n`;
         helpMessage += `• /summarize - 📝 대화 요약 생성\n`;
-        helpMessage += `• /health - 🏥 시스템 상태 확인\n`;
-        helpMessage += `• /maintenance - 🔧 유지보수 모드\n`;
     }
     await ctx.reply(helpMessage);
 });

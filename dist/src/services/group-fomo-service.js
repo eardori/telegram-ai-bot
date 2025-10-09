@@ -14,6 +14,7 @@ exports.getUserTrialGroups = getUserTrialGroups;
 exports.getRegisteredUsersInGroup = getRegisteredUsersInGroup;
 exports.generateFOMOMessage = generateFOMOMessage;
 exports.generateTrialSuccessMessage = generateTrialSuccessMessage;
+exports.getSignupButton = getSignupButton;
 const supabase_1 = require("../utils/supabase");
 /**
  * Check if user has used free trial in this group
@@ -189,6 +190,14 @@ function generateFOMOMessage(registeredUsernames, hasUsedTrial) {
 function generateTrialSuccessMessage() {
     return `✅ 편집 완료! 첫 무료 체험을 사용하셨습니다.\n\n` +
         `💡 더 많은 편집을 원하시면?\n` +
-        `개인 대화에서 가입하시면 즉시 5회 무료!\n\n` +
-        `[🚀 지금 가입하고 5회 더 받기]`;
+        `개인 대화에서 가입하시면 즉시 5회 무료!`;
+}
+/**
+ * Get signup button for free trial message
+ */
+function getSignupButton(botUsername = 'multifulaibot') {
+    return {
+        text: '🚀 지금 가입하고 5회 더 받기',
+        url: `https://t.me/${botUsername}?start=group_signup`
+    };
 }
