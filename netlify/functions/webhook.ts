@@ -945,19 +945,22 @@ bot.on('message:photo', async (ctx) => {
       storeAISuggestions(fileKey, aiSuggestions);
       message += `✨ **AI 추천 (이 사진만을 위한 특별 제안):**\n\n`;
 
+      const aiButtons: Array<{ text: string; data: string }> = [];
+
       aiSuggestions.forEach((suggestion, index) => {
         message += `${index + 1}. **${suggestion.title}**\n`;
         message += `   ${suggestion.description}\n\n`;
 
-        // Add AI suggestion buttons (top rows)
-        keyboard.text(
-          `✨ ${suggestion.title}`,
-          `ai:${index}:${fileKey}`
-        );
-        if ((index + 1) % 2 === 0 || index === aiSuggestions.length - 1) {
-          keyboard.row();
-        }
+        // Add AI suggestion buttons (without emoji)
+        aiButtons.push({
+          text: suggestion.title,
+          data: `ai:${index}:${fileKey}`
+        });
       });
+
+      // Use smart layout for AI buttons
+      addButtonsWithSmartLayout(keyboard, aiButtons);
+      keyboard.row();
 
       message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     }
@@ -966,34 +969,40 @@ bot.on('message:photo', async (ctx) => {
     if (uploadResult.recommendations && uploadResult.recommendations.length > 0) {
       message += `🎯 **템플릿 추천** (적합도 순):\n\n`;
 
+      const templateButtons: Array<{ text: string; data: string }> = [];
+
       uploadResult.recommendations.slice(0, 4).forEach((rec, index) => {
         const stars = '⭐'.repeat(Math.ceil(rec.confidence / 25));
-        message += `${rec.emoji} ${rec.nameKo} ${stars}\n`;
+        message += `${rec.nameKo} ${stars}\n`;
+
+        // Add template buttons (without category emoji, keep only template emoji if exists)
+        templateButtons.push({
+          text: rec.nameKo, // Remove emoji prefix
+          data: `t:${rec.templateKey}:${fileKey}`
+        });
       });
 
       message += `\n💡 **아래 버튼을 눌러 스타일을 선택하세요:**\n`;
 
-      // Add template buttons
-      uploadResult.recommendations.slice(0, 4).forEach(rec => {
-        keyboard.text(
-          `${rec.emoji} ${rec.nameKo}`,
-          `t:${rec.templateKey}:${fileKey}`
-        ).row();
-      });
+      // Use smart layout for template buttons (prefer 2 per row for readability)
+      addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
+      keyboard.row();
     }
 
-    // Add category buttons (2 rows of 3, then 1 row of 2)
+    // Add category buttons (without emojis, smart layout)
+    const categoryButtons: Array<{ text: string; data: string }> = [
+      { text: '3D/피규어', data: `cat:3d_figurine:${fileKey}` },
+      { text: '인물 스타일', data: `cat:portrait_styling:${fileKey}` },
+      { text: '게임/애니', data: `cat:game_animation:${fileKey}` },
+      { text: '이미지 편집', data: `cat:image_editing:${fileKey}` },
+      { text: '창의적 변환', data: `cat:creative_transform:${fileKey}` }
+    ];
+
+    addButtonsWithSmartLayout(keyboard, categoryButtons);
     keyboard.row();
-    keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`)
-      .text('📸 인물 스타일', `cat:portrait_styling:${fileKey}`)
-      .text('🎮 게임/애니', `cat:game_animation:${fileKey}`);
-    keyboard.row();
-    keyboard.text('🛠️ 이미지 편집', `cat:image_editing:${fileKey}`)
-      .text('✨ 창의적 변환', `cat:creative_transform:${fileKey}`);
 
     // Add "View All" button
-    keyboard.row();
-    keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
+    keyboard.text('전체 38개 스타일 보기', `t:all:${fileKey}`);
 
     await ctx.reply(message, {
       parse_mode: 'Markdown',
@@ -1015,6 +1024,63 @@ bot.on('message:photo', async (ctx) => {
 // =============================================================================
 // CALLBACK QUERY HANDLERS (Inline Buttons)
 // =============================================================================
+
+/**
+ * Smart button layout helper
+ * Arranges buttons based on text length for better mobile UX
+ *
+ * Rules:
+ * - Short text (<=10 chars): 3 buttons per row
+ * - Medium text (11-20 chars): 2 buttons per row
+ * - Long text (>20 chars): 1 button per row
+ */
+function addButtonsWithSmartLayout(
+  keyboard: InlineKeyboard,
+  buttons: Array<{ text: string; data: string }>,
+  options: { maxPerRow?: number; preferredPerRow?: number } = {}
+): InlineKeyboard {
+  const { maxPerRow = 3, preferredPerRow } = options;
+
+  let currentRow: Array<{ text: string; data: string }> = [];
+  let currentRowLength = 0;
+
+  buttons.forEach((button, index) => {
+    const textLength = button.text.length;
+
+    // Determine how many buttons can fit based on text length
+    let maxInRow = preferredPerRow || maxPerRow;
+    if (textLength > 20) {
+      maxInRow = 1; // Long text: one per row
+    } else if (textLength > 10) {
+      maxInRow = 2; // Medium text: two per row
+    } else {
+      maxInRow = 3; // Short text: three per row
+    }
+
+    // Check if we need to start a new row
+    const needNewRow = currentRow.length >= maxInRow ||
+                       (currentRow.length > 0 && currentRowLength + textLength > 40);
+
+    if (needNewRow) {
+      // Add current row to keyboard
+      currentRow.forEach(btn => keyboard.text(btn.text, btn.data));
+      keyboard.row();
+      currentRow = [];
+      currentRowLength = 0;
+    }
+
+    // Add button to current row
+    currentRow.push(button);
+    currentRowLength += textLength;
+
+    // If last button, add remaining row
+    if (index === buttons.length - 1 && currentRow.length > 0) {
+      currentRow.forEach(btn => keyboard.text(btn.text, btn.data));
+    }
+  });
+
+  return keyboard;
+}
 
 // In-memory storage for file IDs and AI suggestions (session-based)
 const fileIdCache = new Map<string, string>();
@@ -1481,16 +1547,16 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       if (creditCheck.isFreeTrial) {
         const botUsername = ctx.me.username;
         actionKeyboard = actionKeyboard
-          .url('🚀 지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
+          .url('지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
           .row();
       }
 
-      // Add standard action buttons
+      // Add standard action buttons (without emojis)
       actionKeyboard = actionKeyboard
-        .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
-        .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
-        .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
-        .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
+        .text('다른 스타일 시도', `retry:${fileKey}`)
+        .text('원본으로 돌아가기', `back:${fileKey}`).row()
+        .text('다시 편집', `redo:${template.template_key}:${fileKey}`)
+        .text('이 스타일 평가', `rate:${template.template_key}`);
 
       // Build caption with credit info
       let caption = `✨ **${template.template_name_ko}** 스타일 편집 완료!\n\n` +
@@ -1747,12 +1813,12 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
         `결과를 전송합니다...`
       );
 
-      // Create action buttons for the edited image
+      // Create action buttons for the edited image (without emojis)
       const actionKeyboard = new InlineKeyboard()
-        .text('🔄 다른 옵션 시도', `t:${templateKey}:${fileKey}`)
-        .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
-        .text('🎨 다른 스타일', `retry:${fileKey}`)
-        .text('⭐ 이 스타일 평가', `rate:${templateKey}`);
+        .text('다른 옵션 시도', `t:${templateKey}:${fileKey}`)
+        .text('원본으로 돌아가기', `back:${fileKey}`).row()
+        .text('다른 스타일', `retry:${fileKey}`)
+        .text('이 스타일 평가', `rate:${templateKey}`);
 
       // Build caption with credit info
       let caption = `✨ **${templateWithParams.template_name_ko}** 편집 완료!\n\n` +
@@ -1889,7 +1955,7 @@ bot.callbackQuery(/^retry:(.+):(.+)$/, async (ctx) => {
       ).row();
     });
 
-    keyboard.text('🔍 전체 38개 스타일 보기', `t:all:${fileKey}`);
+    keyboard.text('전체 38개 스타일 보기', `t:all:${fileKey}`);
 
     await ctx.reply(message, { reply_markup: keyboard });
 
@@ -2060,16 +2126,16 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
       if (creditCheck.isFreeTrial) {
         const botUsername = ctx.me.username;
         actionKeyboard = actionKeyboard
-          .url('🚀 지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
+          .url('지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
           .row();
       }
 
-      // Add standard action buttons
+      // Add standard action buttons (without emojis)
       actionKeyboard = actionKeyboard
-        .text('🔄 다른 스타일 시도', `retry:${fileKey}`)
-        .text('💾 원본으로 돌아가기', `back:${fileKey}`).row()
-        .text('🎨 다시 편집', `redo:${template.template_key}:${fileKey}`)
-        .text('⭐ 이 스타일 평가', `rate:${template.template_key}`);
+        .text('다른 스타일 시도', `retry:${fileKey}`)
+        .text('원본으로 돌아가기', `back:${fileKey}`).row()
+        .text('다시 편집', `redo:${template.template_key}:${fileKey}`)
+        .text('이 스타일 평가', `rate:${template.template_key}`);
 
       // Build caption with credit info
       let caption = `✨ **${template.template_name_ko}** 재편집 완료!`;
@@ -2113,11 +2179,11 @@ bot.callbackQuery(/^rate:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
 
     const ratingKeyboard = new InlineKeyboard()
-      .text('⭐ 1점', `rating:${templateKey}:1`)
-      .text('⭐⭐ 2점', `rating:${templateKey}:2`)
-      .text('⭐⭐⭐ 3점', `rating:${templateKey}:3`).row()
-      .text('⭐⭐⭐⭐ 4점', `rating:${templateKey}:4`)
-      .text('⭐⭐⭐⭐⭐ 5점', `rating:${templateKey}:5`);
+      .text('1점', `rating:${templateKey}:1`)
+      .text('2점', `rating:${templateKey}:2`)
+      .text('3점', `rating:${templateKey}:3`).row()
+      .text('4점', `rating:${templateKey}:4`)
+      .text('5점', `rating:${templateKey}:5`);
 
     await ctx.reply('⭐ **이 스타일을 평가해주세요:**\n\n별점을 선택하세요:', {
       reply_markup: ratingKeyboard
@@ -2181,18 +2247,12 @@ bot.callbackQuery(/^tp:(\d+):(.+):(.+)$/, async (ctx) => {
     // Create keyboard
     const keyboard = new InlineKeyboard();
 
-    // Add template buttons (2 rows of 3)
-    for (let i = 0; i < pageTemplates.length; i += 3) {
-      const row = pageTemplates.slice(i, i + 3);
-      row.forEach(template => {
-        const emoji = getCategoryEmoji(template.category);
-        keyboard.text(
-          `${emoji} ${template.template_name_ko}`,
-          `t:${template.template_key}:${fileKey}`
-        );
-      });
-      keyboard.row();
-    }
+    // Add template buttons using smart layout (without emojis)
+    const templateButtons = pageTemplates.map(template => ({
+      text: template.template_name_ko,
+      data: `t:${template.template_key}:${fileKey}`
+    }));
+    addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
 
     // Navigation buttons
     keyboard.row();
@@ -2232,13 +2292,13 @@ bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
 
     const fileKey = `${chatId}:${messageId}`;
 
-    // Get category name
+    // Get category name (without emojis)
     const categoryNames: Record<string, string> = {
-      '3d_figurine': '🎭 3D/피규어',
-      'portrait_styling': '📸 인물 스타일',
-      'game_animation': '🎮 게임/애니메이션',
-      'image_editing': '🛠️ 이미지 편집',
-      'creative_transform': '✨ 창의적 변환'
+      '3d_figurine': '3D/피규어',
+      'portrait_styling': '인물 스타일',
+      'game_animation': '게임/애니메이션',
+      'image_editing': '이미지 편집',
+      'creative_transform': '창의적 변환'
     };
     const categoryName = categoryNames[category] || category;
 
@@ -2265,18 +2325,12 @@ bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
     // Create keyboard
     const keyboard = new InlineKeyboard();
 
-    // Add template buttons (2 rows of 3)
-    for (let i = 0; i < pageTemplates.length; i += 3) {
-      const row = pageTemplates.slice(i, i + 3);
-      row.forEach(template => {
-        const emoji = getCategoryEmoji(template.category);
-        keyboard.text(
-          `${emoji} ${template.template_name_ko}`,
-          `t:${template.template_key}:${fileKey}`
-        );
-      });
-      keyboard.row();
-    }
+    // Add template buttons using smart layout (without emojis)
+    const templateButtons = pageTemplates.map(template => ({
+      text: template.template_name_ko,
+      data: `t:${template.template_key}:${fileKey}`
+    }));
+    addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
 
     // Navigation buttons
     keyboard.row();
@@ -2318,13 +2372,13 @@ bot.callbackQuery(/^cat:([^:]+):(.+):(.+)$/, async (ctx) => {
 
     await ctx.answerCallbackQuery();
 
-    // Get category name in Korean
+    // Get category name in Korean (without emojis)
     const categoryNames: Record<string, string> = {
-      '3d_figurine': '🎭 3D/피규어',
-      'portrait_styling': '📸 인물 스타일',
-      'game_animation': '🎮 게임/애니메이션',
-      'image_editing': '🛠️ 이미지 편집',
-      'creative_transform': '✨ 창의적 변환'
+      '3d_figurine': '3D/피규어',
+      'portrait_styling': '인물 스타일',
+      'game_animation': '게임/애니메이션',
+      'image_editing': '이미지 편집',
+      'creative_transform': '창의적 변환'
     };
 
     const categoryName = categoryNames[category] || category;
@@ -2348,18 +2402,12 @@ bot.callbackQuery(/^cat:([^:]+):(.+):(.+)$/, async (ctx) => {
     const templatesPerPage = 6;
     const pageTemplates = templates.slice(0, templatesPerPage);
 
-    // Add template buttons (2 rows of 3)
-    for (let i = 0; i < pageTemplates.length; i += 3) {
-      const row = pageTemplates.slice(i, i + 3);
-      row.forEach(template => {
-        const emoji = getCategoryEmoji(template.category);
-        keyboard.text(
-          `${emoji} ${template.template_name_ko}`,
-          `t:${template.template_key}:${fileKey}`
-        );
-      });
-      keyboard.row();
-    }
+    // Add template buttons using smart layout (without emojis)
+    const templateButtons = pageTemplates.map(template => ({
+      text: template.template_name_ko,
+      data: `t:${template.template_key}:${fileKey}`
+    }));
+    addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
 
     // Add pagination if more than 6 templates
     if (templates.length > templatesPerPage) {
