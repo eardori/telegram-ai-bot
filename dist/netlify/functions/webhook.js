@@ -2346,11 +2346,16 @@ bot.on('message:text', async (ctx, next) => {
         // Process analysis in background (non-blocking)
         (async () => {
             try {
+                console.log(`📝 Starting background prompt analysis for user ${userId}`);
                 const { analyzePromptWithLLM, saveAnalysisToQueue, formatAnalysisResult } = await Promise.resolve().then(() => __importStar(require('../../src/services/prompt-analysis-service')));
+                console.log('📝 Calling analyzePromptWithLLM...');
                 // LLM 분석
                 const analysis = await analyzePromptWithLLM(rawPrompt);
+                console.log(`✅ Analysis complete: ${analysis.title_ko}`);
+                console.log('📝 Saving to queue...');
                 // 대기열에 저장
                 const queueId = await saveAnalysisToQueue(userId, rawPrompt, analysis);
+                console.log(`✅ Saved to queue: ${queueId}`);
                 // 결과 표시
                 const message = formatAnalysisResult(analysis);
                 const { InlineKeyboard } = await Promise.resolve().then(() => __importStar(require('grammy')));
@@ -2358,18 +2363,28 @@ bot.on('message:text', async (ctx, next) => {
                     .text('✅ 승인하고 저장', `approve_prompt:${queueId}`)
                     .row()
                     .text('❌ 거부', `reject_prompt:${queueId}`);
+                console.log(`📝 Sending result message to chat ${chatId}...`);
                 await bot.api.sendMessage(chatId, message, {
                     parse_mode: 'Markdown',
                     reply_markup: keyboard
                 });
+                console.log('✅ Result message sent successfully');
             }
             catch (error) {
-                console.error('❌ Error analyzing prompt:', error);
-                await bot.api.sendMessage(chatId, '❌ 프롬프트 분석 중 오류가 발생했습니다.\n\n' +
-                    `오류: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-                    '다시 시도하려면 /admin prompt:add 를 입력하세요.');
+                console.error('❌ Error analyzing prompt (background):', error);
+                console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+                try {
+                    await bot.api.sendMessage(chatId, '❌ 프롬프트 분석 중 오류가 발생했습니다.\n\n' +
+                        `오류: ${error instanceof Error ? error.message : String(error)}\n\n` +
+                        '다시 시도하려면 /admin prompt:add 를 입력하세요.');
+                }
+                catch (sendError) {
+                    console.error('❌ Failed to send error message:', sendError);
+                }
             }
-        })();
+        })().catch(err => {
+            console.error('❌ Unhandled error in background analysis:', err);
+        });
         return; // Don't call next() - we handled this message
     }
     // Pass to next handler if not in special state
