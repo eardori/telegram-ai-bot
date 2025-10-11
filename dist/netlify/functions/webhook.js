@@ -101,6 +101,26 @@ function calculateGeminiVisionCost() {
     return 0.00025;
 }
 /**
+ * Get total count of active templates from database
+ */
+async function getActiveTemplateCount() {
+    try {
+        const { count, error } = await supabase_1.supabase
+            .from('prompt_templates')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_active', true);
+        if (error) {
+            console.error('❌ Error counting templates:', error);
+            return 41; // Fallback to known count
+        }
+        return count || 41;
+    }
+    catch (error) {
+        console.error('❌ Error in getActiveTemplateCount:', error);
+        return 41; // Fallback
+    }
+}
+/**
  * Calculate cost for Gemini Files API usage
  * Pricing: ~$0.0005 per image upload + processing cost
  */
@@ -857,8 +877,9 @@ bot.on('message:photo', async (ctx) => {
         ];
         addButtonsWithSmartLayout(keyboard, categoryButtons);
         keyboard.row();
-        // Add "View All" button
-        keyboard.text('전체 38개 스타일 보기', `t:all:${fileKey}`);
+        // Add "View All" button with dynamic count
+        const totalCount = await getActiveTemplateCount();
+        keyboard.text('📋 전체 스타일 보기', `t:all:${fileKey}`);
         await ctx.reply(message, {
             parse_mode: 'Markdown',
             reply_markup: keyboard
@@ -1178,8 +1199,10 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 `p:${shortId}` // Ultra-short format: "p:a1b2c3"
                 ).row();
             });
-            // Back button
-            paramKeyboard.text('뒤로가기', `back_to_main:${chatId}:${messageId}`);
+            // Back button (returns to categories)
+            paramKeyboard.row();
+            paramKeyboard.text('⬅️ 뒤로', `back_to_main:${chatId}:${messageId}`)
+                .text('🏠 처음으로', `back_to_start:${chatId}:${messageId}`);
             await ctx.reply(message, {
                 parse_mode: 'Markdown',
                 reply_markup: paramKeyboard
@@ -1262,15 +1285,13 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                     .url('지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
                     .row();
             }
-            // Add standard action buttons (without emojis)
+            // Add standard action buttons (unified UX)
             actionKeyboard = actionKeyboard
-                .text('다른 스타일 시도', `retry:${fileKey}`)
-                .text('원본으로 돌아가기', `back:${fileKey}`).row()
-                .text('다시 편집', `redo:${template.template_key}:${fileKey}`)
-                .text('이 스타일 평가', `rate:${template.template_key}`);
-            // Build caption with credit info
-            let caption = `✨ **${template.template_name_ko}** 스타일 편집 완료!\n\n` +
-                `📝 프롬프트: ${template.base_prompt.substring(0, 100)}...\n` +
+                .text('🔄 같은 스타일 다시', `redo:${template.template_key}:${fileKey}`).row()
+                .text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`)
+                .text('🏠 처음으로', `back_to_start:${fileKey}`);
+            // Build caption with credit info (simplified)
+            let caption = `✨ **${template.template_name_ko}** 편집 완료!\n\n` +
                 `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요`;
             // Add credit info for private chat or free trial
             if (creditCheck.isFreeTrial) {
@@ -1279,10 +1300,6 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
             else if (ctx.chat?.type === 'private') {
                 caption += `\n\n💳 남은 크레딧: ${deductResult.remainingCredits}회`;
             }
-            caption += `\n\n💡 **다음 액션:**\n` +
-                `• 🔄 다른 스타일로 시도해보세요\n` +
-                `• 💾 원본 이미지로 돌아갈 수 있습니다\n` +
-                `• 🎨 같은 스타일로 다시 편집할 수 있습니다`;
             // Send edited image with action buttons
             const photoSource = editResult.outputFile || editResult.outputUrl;
             await ctx.replyWithPhoto(photoSource, {
@@ -1459,13 +1476,13 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
                 `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n` +
                 `⏱️ 처리 시간: ${Math.round(editResult.processingTime / 1000)}초\n\n` +
                 `결과를 전송합니다...`);
-            // Create action buttons for the edited image (without emojis)
+            // Create action buttons for the edited image (unified UX)
             const actionKeyboard = new grammy_1.InlineKeyboard()
-                .text('다른 옵션 시도', `t:${templateKey}:${fileKey}`)
-                .text('원본으로 돌아가기', `back:${fileKey}`).row()
-                .text('다른 스타일', `retry:${fileKey}`)
-                .text('이 스타일 평가', `rate:${templateKey}`);
-            // Build caption with credit info
+                .text('🔄 같은 스타일 다시', `redo:${templateKey}:${fileKey}`).row()
+                .text('🎨 다른 옵션 선택', `t:${templateKey}:${fileKey}`)
+                .text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`).row()
+                .text('🏠 처음으로', `back_to_start:${fileKey}`);
+            // Build caption with credit info (simplified)
             let caption = `✨ **${templateWithParams.template_name_ko}** 편집 완료!\n\n` +
                 `📋 선택: ${option.emoji || '•'} ${option.option_name_ko}\n` +
                 `⏱️ ${Math.round(editResult.processingTime / 1000)}초 소요`;
@@ -1476,10 +1493,6 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
             else if (ctx.chat?.type === 'private') {
                 caption += `\n\n💳 남은 크레딧: ${deductResult.remainingCredits}회`;
             }
-            caption += `\n\n💡 **다음 액션:**\n` +
-                `• 🔄 다른 옵션으로 시도해보세요\n` +
-                `• 🎨 완전히 다른 스타일로 변경하세요\n` +
-                `• 💾 원본 이미지로 돌아갈 수 있습니다`;
             // Send edited image with action buttons
             const photoSource = editResult.outputFile || editResult.outputUrl;
             await ctx.replyWithPhoto(photoSource, {
@@ -1532,56 +1545,9 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
     }
 });
 // Action button handlers for edited images
-// Retry edit with different style
-bot.callbackQuery(/^retry:(.+):(.+)$/, async (ctx) => {
-    try {
-        const chatId = parseInt(ctx.match[1]);
-        const messageId = parseInt(ctx.match[2]);
-        const fileKey = `${chatId}:${messageId}`;
-        let fileId = getFileId(fileKey);
-        if (!fileId) {
-            const { data } = await supabase_1.supabase
-                .from('image_analysis_results')
-                .select('analysis_data')
-                .eq('message_id', messageId)
-                .single();
-            fileId = data?.analysis_data?.file_id;
-            if (fileId)
-                storeFileId(chatId, messageId, fileId);
-        }
-        if (!fileId) {
-            await ctx.answerCallbackQuery('세션이 만료되었습니다.');
-            return;
-        }
-        await ctx.answerCallbackQuery();
-        // Get file and analysis
-        const file = await ctx.api.getFile(fileId);
-        if (!file.file_path) {
-            await ctx.reply('❌ 원본 이미지를 찾을 수 없습니다.');
-            return;
-        }
-        const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-        // Re-run analysis and show recommendations
-        const { analyzeImage } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-analysis-service')));
-        const { getTemplateRecommendations } = await Promise.resolve().then(() => __importStar(require('../../src/services/template-recommendation-service')));
-        const analysis = await analyzeImage(imageUrl);
-        const recommendations = await getTemplateRecommendations(analysis, 5);
-        // Show new recommendations
-        let message = `🔄 **다른 스타일 추천**\n\n`;
-        const keyboard = new grammy_1.InlineKeyboard();
-        recommendations.slice(0, 4).forEach(rec => {
-            message += `${rec.emoji} ${rec.nameKo} (${rec.confidence}%)\n`;
-            keyboard.text(`${rec.emoji} ${rec.nameKo}`, `t:${rec.templateKey}:${fileKey}`).row();
-        });
-        keyboard.text('전체 38개 스타일 보기', `t:all:${fileKey}`);
-        await ctx.reply(message, { reply_markup: keyboard });
-    }
-    catch (error) {
-        console.error('❌ Error in retry_edit:', error);
-        await ctx.reply('❌ 다른 스타일 추천 중 오류가 발생했습니다.');
-    }
-});
-// Back to original image
+// NOTE: retry handler removed - replaced by back_to_categories and back_to_start
+// Users now have direct access to categories or original image with AI recommendations
+// Back to original image (DEPRECATED - replaced by back_to_start)
 bot.callbackQuery(/^back:(.+):(.+)$/, async (ctx) => {
     try {
         const chatId = parseInt(ctx.match[1]);
@@ -1705,14 +1671,13 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
                     .url('지금 가입하고 5회 더 받기', `https://t.me/${botUsername}?start=group_signup`)
                     .row();
             }
-            // Add standard action buttons (without emojis)
+            // Add standard action buttons (unified UX)
             actionKeyboard = actionKeyboard
-                .text('다른 스타일 시도', `retry:${fileKey}`)
-                .text('원본으로 돌아가기', `back:${fileKey}`).row()
-                .text('다시 편집', `redo:${template.template_key}:${fileKey}`)
-                .text('이 스타일 평가', `rate:${template.template_key}`);
-            // Build caption with credit info
-            let caption = `✨ **${template.template_name_ko}** 재편집 완료!`;
+                .text('🔄 같은 스타일 다시', `redo:${template.template_key}:${fileKey}`).row()
+                .text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`)
+                .text('🏠 처음으로', `back_to_start:${fileKey}`);
+            // Build caption with credit info (simplified)
+            let caption = `✨ **${template.template_name_ko}** 편집 완료!`;
             // Add credit info for private chat or free trial
             if (creditCheck.isFreeTrial) {
                 caption += `\n\n${deductResult.message}`;
@@ -1740,40 +1705,8 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
         await ctx.reply('❌ 재편집 중 오류가 발생했습니다.');
     }
 });
-// Rate style
-bot.callbackQuery(/^rate:(.+)$/, async (ctx) => {
-    try {
-        const templateKey = ctx.match[1];
-        await ctx.answerCallbackQuery();
-        const ratingKeyboard = new grammy_1.InlineKeyboard()
-            .text('1점', `rating:${templateKey}:1`)
-            .text('2점', `rating:${templateKey}:2`)
-            .text('3점', `rating:${templateKey}:3`).row()
-            .text('4점', `rating:${templateKey}:4`)
-            .text('5점', `rating:${templateKey}:5`);
-        await ctx.reply('⭐ **이 스타일을 평가해주세요:**\n\n별점을 선택하세요:', {
-            reply_markup: ratingKeyboard
-        });
-    }
-    catch (error) {
-        console.error('❌ Error in rate_style:', error);
-        await ctx.reply('❌ 평가 요청 중 오류가 발생했습니다.');
-    }
-});
-// Submit rating
-bot.callbackQuery(/^rating:(.+):(\d+)$/, async (ctx) => {
-    try {
-        const templateKey = ctx.match[1];
-        const rating = parseInt(ctx.match[2]);
-        await ctx.answerCallbackQuery(`${rating}점으로 평가해주셔서 감사합니다! ⭐`);
-        // Store rating (optional - can add rating table later)
-        console.log(`📊 User ${ctx.from?.id} rated ${templateKey}: ${rating} stars`);
-        await ctx.reply(`✅ **평가 완료!**\n\n${templateKey} 스타일에 ${rating}점을 주셨습니다. 감사합니다! 🙏`);
-    }
-    catch (error) {
-        console.error('❌ Error in submit_rating:', error);
-    }
-});
+// NOTE: rate and rating handlers removed - feature not implemented
+// Rating feature can be added later with proper database schema
 // Template pagination handler (for "View All")
 bot.callbackQuery(/^tp:(\d+):(.+):(.+)$/, async (ctx) => {
     try {
@@ -1914,6 +1847,93 @@ bot.callbackQuery(/^back_to_main:(.+):(.+)$/, async (ctx) => {
     catch (error) {
         console.error('❌ Error in back_to_main handler:', error);
         await ctx.answerCallbackQuery('❌ 오류가 발생했습니다.');
+    }
+});
+// Back to categories handler (from result screen)
+bot.callbackQuery(/^back_to_categories:(.+):(.+)$/, async (ctx) => {
+    try {
+        const chatId = parseInt(ctx.match[1]);
+        const messageId = parseInt(ctx.match[2]);
+        await ctx.answerCallbackQuery();
+        const keyboard = new grammy_1.InlineKeyboard();
+        const fileKey = `${chatId}:${messageId}`;
+        // Category buttons (no emojis for consistent UX)
+        keyboard.text('3D/피규어', `cat:3d_figurine:${fileKey}`).row();
+        keyboard.text('인물 스타일', `cat:portrait_styling:${fileKey}`).row();
+        keyboard.text('게임/애니메이션', `cat:game_animation:${fileKey}`).row();
+        keyboard.text('이미지 편집', `cat:image_editing:${fileKey}`).row();
+        keyboard.text('창의적 변환', `cat:creative_transform:${fileKey}`).row();
+        // All templates button
+        keyboard.row();
+        keyboard.text('📋 전체 스타일 보기', `show_all:${fileKey}`);
+        await ctx.reply('📂 **카테고리 선택**\n\n' +
+            '원하는 스타일 카테고리를 선택하세요:', { reply_markup: keyboard });
+    }
+    catch (error) {
+        console.error('❌ Error in back_to_categories handler:', error);
+        await ctx.answerCallbackQuery('❌ 오류가 발생했습니다.');
+    }
+});
+// Back to start handler (show original image with AI recommendations)
+bot.callbackQuery(/^back_to_start:(.+):(.+)$/, async (ctx) => {
+    try {
+        const chatId = parseInt(ctx.match[1]);
+        const messageId = parseInt(ctx.match[2]);
+        const fileKey = `${chatId}:${messageId}`;
+        await ctx.answerCallbackQuery();
+        // Get fileId from cache or database
+        let fileId = getFileId(fileKey);
+        if (!fileId) {
+            const { data, error } = await supabase_1.supabase
+                .from('image_analyses')
+                .select('analysis_data')
+                .eq('chat_id', chatId)
+                .eq('message_id', messageId)
+                .single();
+            if (!error && data?.analysis_data?.file_id) {
+                fileId = data.analysis_data.file_id;
+                storeFileId(chatId, messageId, fileId);
+            }
+        }
+        if (!fileId) {
+            await ctx.reply('❌ 원본 이미지를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+            return;
+        }
+        // Get file path from Telegram
+        const file = await ctx.api.getFile(fileId);
+        const imageUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        // Re-analyze and show recommendations
+        const { analyzeImage } = await Promise.resolve().then(() => __importStar(require('../../src/services/image-analysis-service')));
+        const { getTemplateRecommendations } = await Promise.resolve().then(() => __importStar(require('../../src/services/template-recommendation-service')));
+        const analysis = await analyzeImage(imageUrl);
+        const recommendations = await getTemplateRecommendations(analysis, 3);
+        // Build message with AI recommendations
+        let message = `🤖 **AI 분석 결과**\n\n`;
+        if (analysis.rawAnalysis) {
+            message += `${analysis.rawAnalysis}\n\n`;
+        }
+        message += `**추천 스타일:**\n`;
+        const keyboard = new grammy_1.InlineKeyboard();
+        // Add recommendation buttons (3개, 한 줄에 1개씩)
+        recommendations.forEach(rec => {
+            const stars = '⭐'.repeat(Math.ceil(rec.confidence / 25));
+            message += `${rec.nameKo} ${stars}\n`;
+            keyboard.text(rec.nameKo, `t:${rec.templateKey}:${fileKey}`).row();
+        });
+        // Add category and view all buttons
+        keyboard.row();
+        keyboard.text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`);
+        keyboard.row();
+        keyboard.text('📋 전체 스타일 보기', `show_all:${fileKey}`);
+        // Send original image with recommendations
+        await ctx.replyWithPhoto(imageUrl, {
+            caption: message,
+            reply_markup: keyboard
+        });
+    }
+    catch (error) {
+        console.error('❌ Error in back_to_start handler:', error);
+        await ctx.reply('❌ 처음으로 돌아가기 중 오류가 발생했습니다.');
     }
 });
 // Show credits callback - from referral page
@@ -3410,7 +3430,7 @@ bot.on('message:text', async (ctx) => {
                     .text('창의적 변환', `cat:creative_transform:${fileKey}`);
                 // Add "View All" button
                 keyboard.row();
-                keyboard.text('전체 38개 스타일 보기', `t:all:${fileKey}`);
+                keyboard.text('📋 전체 스타일 보기', `show_all:${fileKey}`);
                 await ctx.reply(message, {
                     parse_mode: 'Markdown',
                     reply_markup: keyboard

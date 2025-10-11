@@ -247,62 +247,68 @@ flowchart TD
     SelectTemplate --> End2([템플릿 처리])
 ```
 
-## 버튼 구조 및 네비게이션 플로우
+## 버튼 구조 및 네비게이션 플로우 ⭐ (2025-01-10 개선)
+
+> **주요 개선사항**: 일관된 네비게이션, 명확한 버튼 텍스트, 순환 구조
 
 ```mermaid
 flowchart TD
-    Start([사진 업로드 완료]) --> AIButtons["🤖 AI 추천 3개<br/>[추천1] [추천2] [추천3]<br/>[카테고리로 둘러보기]"]
+    Start([사진 업로드]) --> AIButtons["🤖 AI 추천 화면<br/><br/>[추천1]<br/>[추천2]<br/>[추천3]<br/>[📂 카테고리에서 선택]<br/>[📋 전체 스타일 보기]"]
 
-    AIButtons -->|카테고리로| CategoryScreen
-    AIButtons -->|AI 추천 선택| TemplateProcess[템플릿 처리 실행]
+    AIButtons -->|AI 추천| Process[이미지 처리]
+    AIButtons -->|카테고리| CategoryScreen
+    AIButtons -->|전체| AllList
 
-    CategoryScreen["📂 카테고리 선택 화면<br/><br/>[🎭 3D/피규어]<br/>[👤 인물 스타일]<br/>[🎮 게임/애니메이션]<br/>[✂️ 이미지 편집]<br/>[🎨 창의적 변환]<br/><br/>[📋 전체 스타일 보기]"]
+    CategoryScreen["📂 카테고리 선택<br/><br/>[3D/피규어]<br/>[인물 스타일]<br/>[게임/애니메이션]<br/>[이미지 편집]<br/>[창의적 변환]<br/><br/>[📋 전체 스타일 보기]"]
 
-    CategoryScreen -->|카테고리 선택| CategoryList
-    CategoryScreen -->|전체 스타일 보기| AllList
+    CategoryScreen -->|카테고리| CategoryList
+    CategoryScreen -->|전체| AllList
 
-    CategoryList["📋 카테고리별 템플릿 리스트<br/>(8개/페이지)<br/><br/>[템플릿1] [템플릿2]<br/>[템플릿3] [템플릿4]<br/>...<br/><br/>페이지네이션:"]
+    CategoryList["📋 카테고리별 리스트<br/>(8개/페이지)<br/><br/>[템플릿들...]<br/><br/>[◀ 이전] [1/N] [다음 ▶]<br/>[⬅️ 카테고리] [🏠 처음으로]"]
 
-    AllList["📋 전체 템플릿 리스트<br/>(8개/페이지)<br/><br/>[템플릿1] [템플릿2]<br/>[템플릿3] [템플릿4]<br/>...<br/><br/>페이지네이션:"]
+    AllList["📋 전체 리스트<br/>(8개/페이지)<br/><br/>[템플릿들...]<br/><br/>[◀ 이전] [1/N] [다음 ▶]<br/>[⬅️ 카테고리] [🏠 처음으로]"]
 
-    CategoryList --> Pagination1["[← 이전] [페이지 1/N] [다음 →]<br/>[🔙 카테고리로]"]
-    AllList --> Pagination2["[← 이전] [페이지 1/N] [다음 →]<br/>[🔙 카테고리로]"]
+    CategoryList -->|페이징| CategoryList
+    CategoryList -->|카테고리| CategoryScreen
+    CategoryList -->|처음으로| AIButtons
+    CategoryList -->|템플릿| CheckType{템플릿 타입?}
 
-    Pagination1 -->|이전/다음| CategoryList
-    Pagination1 -->|카테고리로| CategoryScreen
-    Pagination1 -->|템플릿 선택| CheckType{템플릿 타입?}
+    AllList -->|페이징| AllList
+    AllList -->|카테고리| CategoryScreen
+    AllList -->|처음으로| AIButtons
+    AllList -->|템플릿| CheckType
 
-    Pagination2 -->|이전/다음| AllList
-    Pagination2 -->|카테고리로| CategoryScreen
-    Pagination2 -->|템플릿 선택| CheckType
+    CheckType -->|고정형| Process
+    CheckType -->|파라미터형| ParamScreen
 
-    CheckType -->|고정형| TemplateProcess
-    CheckType -->|파라미터형| ParamScreen1
+    ParamScreen["🎨 파라미터 선택<br/><br/>[옵션1]<br/>[옵션2]<br/>...<br/><br/>[⬅️ 뒤로] [🏠 처음으로]"]
 
-    ParamScreen1["🎨 [템플릿명]<br/>📋 [파라미터명]를 선택해주세요:<br/><br/>[옵션1]<br/>[옵션2]<br/>[옵션3]<br/>...<br/><br/>[🔙 뒤로가기]"]
+    ParamScreen -->|뒤로| CategoryScreen
+    ParamScreen -->|처음으로| AIButtons
+    ParamScreen -->|옵션| Process
 
-    ParamScreen1 -->|뒤로가기| CategoryList
-    ParamScreen1 -->|옵션 선택| CheckMoreParams{추가 파라미터?}
+    Process --> ResultScreen["✅ 결과 화면<br/><br/>[결과 이미지]<br/><br/>[🔄 같은 스타일 다시]<br/>[🎨 다른 옵션 선택]*<br/>[📂 카테고리에서 선택]<br/>[🏠 처음으로]<br/><br/>* 파라미터형만 표시"]
 
-    CheckMoreParams -->|있음| ParamScreen2["🎨 [템플릿명]<br/>📋 [다음 파라미터명]를 선택해주세요:<br/><br/>[옵션1]<br/>[옵션2]<br/>...<br/><br/>[🔙 뒤로가기]"]
-    CheckMoreParams -->|없음| TemplateProcess
+    ResultScreen -->|같은 스타일| Process
+    ResultScreen -->|다른 옵션| ParamScreen
+    ResultScreen -->|카테고리| CategoryScreen
+    ResultScreen -->|처음으로| AIButtons
 
-    ParamScreen2 -->|뒤로가기| ParamScreen1
-    ParamScreen2 -->|옵션 선택| TemplateProcess
-
-    TemplateProcess --> ResultScreen["✅ 처리 완료<br/><br/>[결과 이미지]<br/><br/>[🔄 같은 스타일로 다시]<br/>[🎨 다른 스타일 선택]<br/>[📸 원본으로 돌아가기]"]
-
-    ResultScreen -->|같은 스타일로 다시| CheckType
-    ResultScreen -->|다른 스타일 선택| CategoryScreen
-    ResultScreen -->|원본으로| End([종료])
-
-    style CategoryScreen fill:#e1f5ff
-    style CategoryList fill:#fff4e1
-    style AllList fill:#fff4e1
-    style ParamScreen1 fill:#ffe1f5
-    style ParamScreen2 fill:#ffe1f5
-    style ResultScreen fill:#e1ffe1
+    style AIButtons fill:#e1f5ff,stroke:#333,stroke-width:3px
+    style CategoryScreen fill:#fff4e1
+    style CategoryList fill:#ffe1f5
+    style AllList fill:#ffe1f5
+    style ParamScreen fill:#ffeee1
+    style ResultScreen fill:#e1ffe1,stroke:#333,stroke-width:3px
+    style Process fill:#f0f0f0
 ```
+
+### 🔑 네비게이션 원칙
+
+1. **🏠 처음으로**: 어디서든 원본 이미지 + AI 추천으로 복귀
+2. **⬅️ 뒤로**: 이전 단계로 (카테고리 또는 템플릿 리스트)
+3. **📂 카테고리**: 결과 화면에서 빠르게 다른 스타일 탐색
+4. **🔄 같은 스타일 다시**: AI 랜덤성으로 다른 결과 생성
 
 ## 버튼 레이아웃 규칙
 
@@ -336,18 +342,29 @@ flowchart TD
 - **개수**: 파라미터별 4-6개
 - **하단**: [🔙 뒤로가기] (이전 화면으로)
 
-### 6. 결과 화면 액션 버튼
-- **배치**: 1줄 1버튼
-- **고정 3개**:
-  - 🔄 같은 스타일로 다시
-  - 🎨 다른 스타일 선택
-  - 📸 원본으로 돌아가기
+### 6. 결과 화면 액션 버튼 ⭐ (2025-01-10 개선)
+- **배치**:
+  - 첫 줄: [🔄 같은 스타일 다시]
+  - 둘째 줄 (파라미터형만): [🎨 다른 옵션 선택]
+  - 셋째 줄: [📂 카테고리에서 선택] [🏠 처음으로]
+- **변경사항**:
+  - ❌ 제거: "다른 스타일 시도" (AI 재추천) → 불필요
+  - ❌ 제거: "원본으로 돌아가기" (막다른 길) → "처음으로"로 대체
+  - ❌ 제거: "이 스타일 평가" (미구현) → 우선순위 낮음
+  - ✅ 추가: "🏠 처음으로" → 원본 이미지 + AI 추천 복귀
 
 ### 7. 버튼 텍스트 규칙
-- ✅ **이모지 제거** (2025-01-10 적용)
-- 한국어 명확한 표현
-- 20자 이내 권장
-- 일관된 톤앤매너
+- ✅ **이모지 최소화** (2025-01-10 적용)
+  - 네비게이션 버튼에만 사용: 🏠 ⬅️ 📂 📋
+  - 액션 버튼: 🔄 🎨
+  - 카테고리/템플릿 버튼: 이모지 제거
+- **명확한 한국어 표현**
+  - "뒤로가기" → "⬅️ 뒤로"
+  - "카테고리로" → "⬅️ 카테고리" 또는 "📂 카테고리에서 선택"
+  - "전체 38개 스타일 보기" → "📋 전체 스타일 보기" (동적 개수)
+- **일관된 네비게이션**
+  - 모든 화면에서 동일한 버튼 텍스트 사용
+  - 예측 가능한 다음 단계
 
 ---
 
@@ -369,7 +386,29 @@ flowchart TD
 - [x] 이미지 처리 및 결과 표시 (Replicate API)
 - [x] 에러 처리 및 크레딧 환불
 
-### 🎯 최근 추가된 기능 (2025-01-10)
+### 🎯 최근 추가된 기능
+
+#### 2025-01-10 (최신) ⭐ 버튼 네비게이션 UX 대개선
+- [x] **결과 화면 버튼 통일**:
+  - 고정형/파라미터형/재편집 모두 동일한 버튼 구조
+  - [🔄 같은 스타일 다시] - 모든 템플릿에 추가
+  - [🎨 다른 옵션 선택] - 파라미터형만 표시
+  - [📂 카테고리에서 선택] - 빠른 스타일 탐색
+  - [🏠 처음으로] - 원본 + AI 추천으로 복귀
+- [x] **핸들러 정리**:
+  - ❌ 제거: retry (AI 재추천) - 불필요한 단계
+  - ❌ 제거: rate (평가 기능) - 미구현
+  - ✅ 추가: back_to_categories - 카테고리 선택
+  - ✅ 추가: back_to_start - 원본 이미지 + AI 추천
+- [x] **텍스트 일관성**:
+  - "전체 38개" → "전체 스타일 보기" (동적 개수)
+  - "뒤로가기" → "⬅️ 뒤로"
+  - "카테고리로" → "📂 카테고리에서 선택"
+- [x] **캡션 간소화**:
+  - "다음 액션" 섹션 제거 (버튼만으로 충분)
+  - 프롬프트 미리보기 제거 (불필요)
+
+#### 2025-01-10 (이전) 파라미터형 템플릿 추가
 - [x] **5개 파라미터형 템플릿 추가**:
   - 계절 변경 (4계절 옵션)
   - 헤어스타일 변경 (6가지 스타일)
@@ -377,7 +416,7 @@ flowchart TD
   - 오브젝트 제거 (6가지 제거 타입)
   - 텍스트 편집 (텍스트 입력 타입)
 - [x] **버튼 UX 개선**:
-  - 모든 버튼에서 이모지 제거 (모바일 최적화)
+  - 카테고리/템플릿 버튼에서 이모지 제거
   - 스마트 레이아웃 알고리즘 적용
   - 1줄 1버튼 파라미터 선택
 - [x] **back_to_main 핸들러 추가**:
@@ -404,7 +443,12 @@ flowchart TD
 
 **마지막 업데이트**: 2025-01-10
 **변경 사항**:
+- ⭐ 버튼 네비게이션 UX 대개선 (일관성, 명확성, 순환 구조)
+- 결과 화면 버튼 통일 (고정형/파라미터형/재편집 동일 구조)
+- 새 핸들러 추가: back_to_categories, back_to_start
+- 불필요한 핸들러 제거: retry, rate
+- 텍스트 일관성: 동적 개수, 명확한 네비게이션
+- 캡션 간소화: "다음 액션" 섹션 제거
 - 파라미터형 템플릿 6개 → 8개 업데이트
-- 버튼 구조 및 네비게이션 플로우 다이어그램 추가
+- 버튼 구조 및 네비게이션 플로우 다이어그램 개선
 - 버튼 레이아웃 규칙 7가지 문서화
-- 최근 기능 추가 내역 반영
