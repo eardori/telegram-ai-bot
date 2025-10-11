@@ -1897,12 +1897,76 @@ bot.callbackQuery(/^back_to_categories:(.+):(.+)$/, async (ctx) => {
         await ctx.answerCallbackQuery('❌ 오류가 발생했습니다.');
     }
 });
-// Back to start handler (show original image with AI recommendations)
-bot.callbackQuery(/^back_to_start:(.+):(.+)$/, async (ctx) => {
+// Show all templates handler (redirect to t:all)
+bot.callbackQuery(/^show_all:(.+)$/, async (ctx) => {
     try {
-        const chatId = parseInt(ctx.match[1]);
-        const messageId = parseInt(ctx.match[2]);
-        const fileKey = `${chatId}:${messageId}`;
+        const fileKey = ctx.match[1];
+        const [chatIdStr, messageIdStr] = fileKey.split(':');
+        const chatId = parseInt(chatIdStr);
+        const messageId = parseInt(messageIdStr);
+        await ctx.answerCallbackQuery();
+        // Get fileId from cache or database
+        let fileId = getFileId(fileKey);
+        if (!fileId) {
+            const { data, error } = await supabase_1.supabase
+                .from('image_analyses')
+                .select('analysis_data')
+                .eq('chat_id', chatId)
+                .eq('message_id', messageId)
+                .single();
+            if (!error && data?.analysis_data?.file_id) {
+                fileId = data.analysis_data.file_id;
+                storeFileId(chatId, messageId, fileId);
+            }
+        }
+        if (!fileId) {
+            await ctx.reply('❌ 이미지 정보를 찾을 수 없습니다. 사진을 다시 업로드해주세요.');
+            return;
+        }
+        // Fetch all templates from database
+        const { data: allTemplates, error } = await supabase_1.supabase
+            .from('prompt_templates')
+            .select('*')
+            .eq('is_active', true)
+            .order('category', { ascending: true })
+            .order('priority', { ascending: false });
+        if (error || !allTemplates) {
+            await ctx.reply('❌ 템플릿 목록을 가져오는 중 오류가 발생했습니다.');
+            return;
+        }
+        // Create paginated keyboard with all templates
+        const keyboard = new grammy_1.InlineKeyboard();
+        const templatesPerPage = 8;
+        const totalPages = Math.ceil(allTemplates.length / templatesPerPage);
+        const pageTemplates = allTemplates.slice(0, templatesPerPage);
+        // Add template buttons (한 줄에 1개씩)
+        pageTemplates.forEach(template => {
+            keyboard.text(template.template_name_ko, `t:${template.template_key}:${chatId}:${messageId}`).row();
+        });
+        // Navigation buttons
+        keyboard.row();
+        keyboard.text(`1/${totalPages}`, `noop`);
+        if (allTemplates.length > templatesPerPage) {
+            keyboard.text('➡️ 다음', `tp:1:${fileKey}`);
+        }
+        // Back to categories
+        keyboard.row();
+        keyboard.text('🔙 카테고리로', `back_to_main:${fileKey}`);
+        await ctx.reply(`🎨 **전체 스타일** (1/${totalPages} 페이지)\n\n` +
+            `총 ${allTemplates.length}개 스타일 중 선택:`, { reply_markup: keyboard });
+    }
+    catch (error) {
+        console.error('❌ Error in show_all handler:', error);
+        await ctx.reply('❌ 전체 스타일 목록을 표시하는 중 오류가 발생했습니다.');
+    }
+});
+// Back to start handler (show original image with AI recommendations)
+bot.callbackQuery(/^back_to_start:(.+)$/, async (ctx) => {
+    try {
+        const fileKey = ctx.match[1];
+        const [chatIdStr, messageIdStr] = fileKey.split(':');
+        const chatId = parseInt(chatIdStr);
+        const messageId = parseInt(messageIdStr);
         await ctx.answerCallbackQuery();
         // Get fileId from cache or database
         let fileId = getFileId(fileKey);
@@ -1960,12 +2024,11 @@ bot.callbackQuery(/^back_to_start:(.+):(.+)$/, async (ctx) => {
     }
 });
 // Feedback handlers (like/dislike)
-bot.callbackQuery(/^feedback:(like|dislike):([^:]+):(.+):(.+)$/, async (ctx) => {
+bot.callbackQuery(/^feedback:(like|dislike):([^:]+):(.+)$/, async (ctx) => {
     try {
         const feedbackType = ctx.match[1]; // 'like' or 'dislike'
         const templateKey = ctx.match[2];
-        const chatId = parseInt(ctx.match[3]);
-        const messageId = parseInt(ctx.match[4]);
+        const fileKey = ctx.match[3];
         const satisfied = feedbackType === 'like';
         await ctx.answerCallbackQuery(satisfied ? '👍 감사합니다!' : '👎 피드백 감사합니다!');
         // Get template name
@@ -1993,8 +2056,8 @@ bot.callbackQuery(/^feedback:(like|dislike):([^:]+):(.+):(.+)$/, async (ctx) => 
         // If dissatisfied, offer help
         if (!satisfied) {
             const keyboard = new grammy_1.InlineKeyboard()
-                .text('🎨 다른 스타일 추천받기', `back_to_categories:${chatId}:${messageId}`)
-                .text('🏠 처음으로', `back_to_start:${chatId}:${messageId}`);
+                .text('🎨 다른 스타일 추천받기', `back_to_categories:${fileKey}`)
+                .text('🏠 처음으로', `back_to_start:${fileKey}`);
             await ctx.reply('😔 아쉽네요! 더 나은 결과를 위해 도와드리겠습니다.\n\n' +
                 '다른 스타일을 시도해보시거나, 처음부터 다시 시작할 수 있습니다.', { reply_markup: keyboard });
         }
