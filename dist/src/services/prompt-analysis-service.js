@@ -442,39 +442,48 @@ function escapeMarkdown(text) {
     return text.replace(/([_*\[\]`])/g, '\\$1');
 }
 /**
- * 분석 결과 포맷팅 (Telegram 메시지)
+ * Escape HTML special characters
+ */
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+/**
+ * 분석 결과 포맷팅 (Telegram 메시지) - HTML 모드
  */
 function formatAnalysisResult(analysis) {
-    let message = `🔍 *프롬프트 분석 완료*\n\n`;
-    message += `*제목*\n`;
-    message += `• 한글: ${escapeMarkdown(analysis.title_ko)}\n`;
-    message += `• 영문: ${escapeMarkdown(analysis.title_en)}\n\n`;
-    message += `*분류*\n`;
+    let message = `🔍 <b>프롬프트 분석 완료</b>\n\n`;
+    message += `<b>제목</b>\n`;
+    message += `• 한글: ${escapeHtml(escapeMarkdown(analysis.title_ko))}\n`;
+    message += `• 영문: ${escapeHtml(escapeMarkdown(analysis.title_en))}\n\n`;
+    message += `<b>분류</b>\n`;
     message += `• 카테고리: ${analysis.category}\n`;
     message += `• 서브카테고리: ${analysis.subcategory}\n\n`;
-    message += `*이미지 요구사항*\n`;
+    message += `<b>이미지 요구사항</b>\n`;
     message += `• 최소 이미지: ${analysis.min_images}장\n`;
     message += `• 최대 이미지: ${analysis.max_images}장\n`;
     message += `• 얼굴 필요: ${analysis.requires_face ? '예' : '아니오'}\n\n`;
-    message += `*설명*\n`;
-    message += `${escapeMarkdown(analysis.description_ko)}\n\n`;
+    message += `<b>설명</b>\n`;
+    message += `${escapeHtml(escapeMarkdown(analysis.description_ko))}\n\n`;
     if (analysis.detected_parameters.length > 0) {
-        message += `*감지된 파라미터* (${analysis.detected_parameters.length}개)\n`;
+        message += `<b>감지된 파라미터</b> (${analysis.detected_parameters.length}개)\n`;
         analysis.detected_parameters.forEach(param => {
-            message += `• ${escapeMarkdown(param.parameter_name_ko)} (${param.suggested_options.length}개 옵션)\n`;
+            message += `• ${escapeHtml(escapeMarkdown(param.parameter_name_ko))} (${param.suggested_options.length}개 옵션)\n`;
         });
         message += `\n`;
     }
-    message += `*우선순위 점수*: ${analysis.priority_score}/100\n`;
-    message += `*신뢰도*: ${(analysis.confidence * 100).toFixed(0)}%\n\n`;
+    message += `<b>우선순위 점수</b>: ${analysis.priority_score}/100\n`;
+    message += `<b>신뢰도</b>: ${(analysis.confidence * 100).toFixed(0)}%\n\n`;
     if (analysis.warnings.length > 0) {
-        message += `⚠️ *경고사항*\n`;
-        analysis.warnings.forEach(w => message += `• ${escapeMarkdown(w)}\n`);
+        message += `⚠️ <b>경고사항</b>\n`;
+        analysis.warnings.forEach(w => message += `• ${escapeHtml(escapeMarkdown(w))}\n`);
         message += `\n`;
     }
     if (analysis.improvement_suggestions.length > 0) {
-        message += `💡 *개선 제안*\n`;
-        analysis.improvement_suggestions.forEach(s => message += `• ${escapeMarkdown(s)}\n`);
+        message += `💡 <b>개선 제안</b>\n`;
+        analysis.improvement_suggestions.forEach(s => message += `• ${escapeHtml(escapeMarkdown(s))}\n`);
     }
     return message;
 }

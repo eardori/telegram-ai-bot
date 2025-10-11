@@ -2971,7 +2971,7 @@ bot.on('message:text', async (ctx, next) => {
 
         console.log(`📝 Sending result message to chat ${chatId}...`);
         await bot.api.sendMessage(chatId, message, {
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
           reply_markup: keyboard
         });
         console.log('✅ Result message sent successfully');

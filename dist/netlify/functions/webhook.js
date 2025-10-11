@@ -2365,7 +2365,7 @@ bot.on('message:text', async (ctx, next) => {
                     .text('❌ 거부', `reject_prompt:${queueId}`);
                 console.log(`📝 Sending result message to chat ${chatId}...`);
                 await bot.api.sendMessage(chatId, message, {
-                    parse_mode: 'Markdown',
+                    parse_mode: 'HTML',
                     reply_markup: keyboard
                 });
                 console.log('✅ Result message sent successfully');
