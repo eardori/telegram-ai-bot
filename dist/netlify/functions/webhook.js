@@ -1890,6 +1890,32 @@ bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
 bot.callbackQuery('noop', async (ctx) => {
     await ctx.answerCallbackQuery();
 });
+// Back to main categories handler
+bot.callbackQuery(/^back_to_main:(.+):(.+)$/, async (ctx) => {
+    try {
+        const chatId = parseInt(ctx.match[1]);
+        const messageId = parseInt(ctx.match[2]);
+        await ctx.answerCallbackQuery();
+        // Show categories menu
+        const keyboard = new grammy_1.InlineKeyboard();
+        const fileKey = `${chatId}:${messageId}`;
+        // Category buttons (한 줄에 1개씩)
+        keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`).row();
+        keyboard.text('👤 인물 스타일', `cat:portrait_styling:${fileKey}`).row();
+        keyboard.text('🎮 게임/애니메이션', `cat:game_animation:${fileKey}`).row();
+        keyboard.text('✂️ 이미지 편집', `cat:image_editing:${fileKey}`).row();
+        keyboard.text('🎨 창의적 변환', `cat:creative_transform:${fileKey}`).row();
+        // All templates button
+        keyboard.row();
+        keyboard.text('📋 전체 스타일 보기', `show_all:${fileKey}`);
+        await ctx.editMessageText('🎨 **카테고리 선택**\n\n' +
+            '원하는 스타일 카테고리를 선택하세요:', { reply_markup: keyboard });
+    }
+    catch (error) {
+        console.error('❌ Error in back_to_main handler:', error);
+        await ctx.answerCallbackQuery('❌ 오류가 발생했습니다.');
+    }
+});
 // Show credits callback - from referral page
 bot.callbackQuery('show_credits', async (ctx) => {
     try {
