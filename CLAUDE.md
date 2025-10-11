@@ -4,6 +4,38 @@
 
 ### ✅ 완료된 작업 (COMPLETED)
 
+#### 6. 사용자 피드백 시스템 ⭐ (2025-01-10 완료)
+**목표:** 템플릿별 만족도 추적 및 품질 개선
+
+**6.1. 데이터베이스 스키마** ✅
+- `template_feedback` 테이블 (만족도 및 이유 저장)
+- `v_template_feedback_stats` 뷰 (전체 통계)
+- `v_recent_feedback_stats` 뷰 (최근 7일)
+- `v_low_satisfaction_alerts` 뷰 (50% 미만 경고)
+- `get_feedback_summary()` 함수 (트렌드 분석)
+- SQL: `sql/025_user_feedback_system.sql`
+
+**6.2. 결과 화면 피드백 버튼** ✅
+- 모든 편집 결과 화면에 [👍 좋아요 / 👎 별로예요] 추가
+- 불만족 시 자동 액션 제안 (다른 스타일 추천, 처음으로)
+- 만족 시 감사 메시지 및 추천 유도
+
+**6.3. 관리자 대시보드** ✅
+- `/admin feedback [days]` - 피드백 통계 (기본 7일)
+- 전체 통계 Top 10 (만족도순)
+- 최근 트렌드 (개선/하락/안정/신규)
+- 🚨 주의 필요 템플릿 알림 (만족도 50% 미만)
+
+**비즈니스 임팩트:**
+- 데이터 기반 템플릿 품질 개선
+- 불만족 사용자 즉시 대응
+- 인기/비인기 템플릿 파악
+
+**배포 상태:** ✅ 코드 배포 완료
+**다음 단계:** SQL 스키마 Supabase 실행 필요
+
+---
+
 #### 5. 버튼 네비게이션 UX 대개선 ⭐ (2025-01-10 완료)
 **목표:** 일관성 있고 예측 가능한 버튼 구조로 사용자 경험 향상
 
@@ -197,7 +229,49 @@
 
 ### 🔥 다음 작업 (HIGH PRIORITY)
 
-#### 4. 그룹 FOMO 전략 개선 (1일 예상)
+#### 7. 프롬프트 관리 시스템 Phase 2 (1일 예상)
+**목표**: 템플릿 활성화/비활성화 및 사용 통계
+
+**7.1. `/admin prompt:stats <template_key>` - 상세 통계**
+```typescript
+// 기능:
+- 템플릿별 총 사용 횟수
+- 최근 7일/30일 사용 추이
+- 평균 처리 시간
+- 성공률 (에러 없는 편집 비율)
+- 사용자 만족도 (피드백 시스템 연동)
+```
+
+**7.2. `/admin prompt:toggle <template_key>` - 활성화 토글**
+```typescript
+// 기능:
+- 템플릿 활성화/비활성화
+- 비활성화 시 사용자에게 보이지 않음
+- A/B 테스트용 플래그 설정
+```
+
+**데이터베이스:**
+```sql
+-- prompt_templates 테이블에 통계 필드 추가
+ALTER TABLE prompt_templates ADD COLUMN usage_count INT DEFAULT 0;
+ALTER TABLE prompt_templates ADD COLUMN last_used_at TIMESTAMP;
+ALTER TABLE prompt_templates ADD COLUMN success_rate DECIMAL(5,2);
+
+-- 사용 통계 뷰 생성
+CREATE VIEW prompt_usage_stats AS
+SELECT
+  template_key,
+  COUNT(*) as total_uses,
+  AVG(processing_time) as avg_processing_time,
+  COUNT(CASE WHEN success = true THEN 1 END)::DECIMAL / COUNT(*) * 100 as success_rate
+FROM credit_transactions
+WHERE transaction_type = 'usage'
+GROUP BY template_key;
+```
+
+---
+
+#### 8. 그룹 FOMO 전략 개선 (1일 예상)
 **목표**: 그룹 무료 체험 → 가입 전환율 최적화
 
 **4.1. 전환율 추적 시스템**

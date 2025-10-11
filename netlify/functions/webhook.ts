@@ -1579,7 +1579,10 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       actionKeyboard = actionKeyboard
         .text('🔄 같은 스타일 다시', `redo:${template.template_key}:${fileKey}`).row()
         .text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`)
-        .text('🏠 처음으로', `back_to_start:${fileKey}`);
+        .text('🏠 처음으로', `back_to_start:${fileKey}`).row()
+        .row()
+        .text('👍 좋아요', `feedback:like:${template.template_key}:${fileKey}`)
+        .text('👎 별로예요', `feedback:dislike:${template.template_key}:${fileKey}`);
 
       // Build caption with credit info (simplified)
       let caption = `✨ **${template.template_name_ko}** 편집 완료!\n\n` +
@@ -1835,7 +1838,10 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
         .text('🔄 같은 스타일 다시', `redo:${templateKey}:${fileKey}`).row()
         .text('🎨 다른 옵션 선택', `t:${templateKey}:${fileKey}`)
         .text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`).row()
-        .text('🏠 처음으로', `back_to_start:${fileKey}`);
+        .text('🏠 처음으로', `back_to_start:${fileKey}`).row()
+        .row()
+        .text('👍 좋아요', `feedback:like:${templateKey}:${fileKey}`)
+        .text('👎 별로예요', `feedback:dislike:${templateKey}:${fileKey}`);
 
       // Build caption with credit info (simplified)
       let caption = `✨ **${templateWithParams.template_name_ko}** 편집 완료!\n\n` +
@@ -2084,7 +2090,10 @@ bot.callbackQuery(/^redo:([^:]+):(.+):(.+)$/, async (ctx) => {
       actionKeyboard = actionKeyboard
         .text('🔄 같은 스타일 다시', `redo:${template.template_key}:${fileKey}`).row()
         .text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`)
-        .text('🏠 처음으로', `back_to_start:${fileKey}`);
+        .text('🏠 처음으로', `back_to_start:${fileKey}`).row()
+        .row()
+        .text('👍 좋아요', `feedback:like:${template.template_key}:${fileKey}`)
+        .text('👎 별로예요', `feedback:dislike:${template.template_key}:${fileKey}`);
 
       // Build caption with credit info (simplified)
       let caption = `✨ **${template.template_name_ko}** 편집 완료!`;
@@ -2417,6 +2426,67 @@ bot.callbackQuery(/^back_to_start:(.+):(.+)$/, async (ctx) => {
   }
 });
 
+// Feedback handlers (like/dislike)
+bot.callbackQuery(/^feedback:(like|dislike):([^:]+):(.+):(.+)$/, async (ctx) => {
+  try {
+    const feedbackType = ctx.match[1]; // 'like' or 'dislike'
+    const templateKey = ctx.match[2];
+    const chatId = parseInt(ctx.match[3]);
+    const messageId = parseInt(ctx.match[4]);
+
+    const satisfied = feedbackType === 'like';
+
+    await ctx.answerCallbackQuery(satisfied ? '👍 감사합니다!' : '👎 피드백 감사합니다!');
+
+    // Get template name
+    const { data: template } = await supabase
+      .from('prompt_templates')
+      .select('template_name_ko')
+      .eq('template_key', templateKey)
+      .single();
+
+    // Store feedback in database
+    const { error } = await supabase
+      .from('template_feedback')
+      .insert({
+        user_id: ctx.from?.id,
+        chat_id: ctx.chat?.id,
+        template_key: templateKey,
+        template_name: template?.template_name_ko || templateKey,
+        satisfied: satisfied
+      });
+
+    if (error) {
+      console.error('❌ Error storing feedback:', error);
+    } else {
+      console.log(`✅ Feedback stored: ${templateKey} - ${satisfied ? 'positive' : 'negative'}`);
+    }
+
+    // If dissatisfied, offer help
+    if (!satisfied) {
+      const keyboard = new InlineKeyboard()
+        .text('🎨 다른 스타일 추천받기', `back_to_categories:${chatId}:${messageId}`)
+        .text('🏠 처음으로', `back_to_start:${chatId}:${messageId}`);
+
+      await ctx.reply(
+        '😔 아쉽네요! 더 나은 결과를 위해 도와드리겠습니다.\n\n' +
+        '다른 스타일을 시도해보시거나, 처음부터 다시 시작할 수 있습니다.',
+        { reply_markup: keyboard }
+      );
+    } else {
+      // Just acknowledge positive feedback
+      await ctx.reply(
+        '🎉 좋아해 주셔서 감사합니다!\n\n' +
+        '계속해서 멋진 이미지를 만들어보세요! ✨'
+      );
+    }
+
+  } catch (error) {
+    console.error('❌ Error in feedback handler:', error);
+    await ctx.answerCallbackQuery('❌ 피드백 처리 중 오류가 발생했습니다.');
+  }
+});
+
 // Show credits callback - from referral page
 bot.callbackQuery('show_credits', async (ctx) => {
   try {
@@ -2671,7 +2741,8 @@ bot.command('help', async (ctx) => {
     helpMessage += `**대시보드 및 관리:**\n`;
     helpMessage += `• /admin - 📊 통합 대시보드 (24h/7d/30d)\n`;
     helpMessage += `• /admin user:search <id> - 🔍 사용자 검색\n`;
-    helpMessage += `• /admin credit:grant <id> <amount> <reason> - 💳 크레딧 지급\n\n`;
+    helpMessage += `• /admin credit:grant <id> <amount> <reason> - 💳 크레딧 지급\n`;
+    helpMessage += `• /admin feedback [days] - 📊 사용자 피드백 통계\n\n`;
 
     helpMessage += `**시스템 모니터링:**\n`;
     helpMessage += `• /apicost - 💰 API 사용량 및 비용 통계\n`;
@@ -2844,6 +2915,78 @@ bot.command('admin', async (ctx) => {
         await ctx.reply(message, { parse_mode: 'Markdown' });
       }
 
+    } else if (subcommand === 'feedback') {
+      // /admin feedback [period]
+      const period = parseInt(args[1]) || 7; // Default: 7 days
+
+      console.log(`📊 Admin feedback dashboard requested for ${period} days`);
+
+      // Get overall statistics
+      const { data: overallStats, error: statsError } = await supabase
+        .from('v_template_feedback_stats')
+        .select('*')
+        .order('total_feedback', { ascending: false })
+        .limit(10);
+
+      // Get recent feedback (last N days)
+      const { data: recentStats, error: recentError } = await supabase
+        .rpc('get_feedback_summary', { p_days: period });
+
+      // Get low satisfaction alerts
+      const { data: alerts, error: alertsError } = await supabase
+        .from('v_low_satisfaction_alerts')
+        .select('*');
+
+      if (statsError || recentError || alertsError) {
+        console.error('❌ Error fetching feedback stats:', statsError || recentError || alertsError);
+        await ctx.reply('❌ 피드백 통계를 가져오는데 실패했습니다.');
+        return;
+      }
+
+      // Format message
+      let message = '📊 **사용자 피드백 대시보드**\n\n';
+
+      // Overall stats (Top 10)
+      if (overallStats && overallStats.length > 0) {
+        message += '**전체 통계 (Top 10)**\n';
+        overallStats.forEach((stat: any, idx: number) => {
+          const emoji = stat.satisfaction_rate >= 80 ? '🟢' : stat.satisfaction_rate >= 60 ? '🟡' : '🔴';
+          message += `${idx + 1}. ${emoji} ${stat.template_name}\n`;
+          message += `   만족도: ${stat.satisfaction_rate}% (${stat.positive_count}👍 / ${stat.negative_count}👎)\n`;
+          message += `   총 피드백: ${stat.total_feedback}회\n\n`;
+        });
+      } else {
+        message += '아직 피드백이 없습니다.\n\n';
+      }
+
+      // Recent trends
+      if (recentStats && recentStats.length > 0) {
+        message += `\n**최근 ${period}일 트렌드**\n`;
+        recentStats.forEach((stat: any) => {
+          const trendEmoji = stat.trend === 'improving' ? '📈' :
+                            stat.trend === 'declining' ? '📉' :
+                            stat.trend === 'new' ? '🆕' : '➡️';
+          message += `${trendEmoji} ${stat.template_name}: ${stat.satisfaction_rate}%\n`;
+        });
+        message += '\n';
+      }
+
+      // Low satisfaction alerts
+      if (alerts && alerts.length > 0) {
+        message += '\n🚨 **주의 필요한 템플릿**\n';
+        message += '(만족도 50% 미만, 피드백 10개 이상)\n\n';
+        alerts.forEach((alert: any) => {
+          message += `🔴 ${alert.template_name}\n`;
+          message += `   만족도: ${alert.satisfaction_rate}%\n`;
+          message += `   불만족: ${alert.negative_count}회 / 총 ${alert.total_feedback}회\n\n`;
+        });
+      }
+
+      message += '\n사용법: `/admin feedback [기간]`\n';
+      message += '예시: `/admin feedback 30` (최근 30일)';
+
+      await ctx.reply(message, { parse_mode: 'Markdown' });
+
     } else if (subcommand.startsWith('prompt:view')) {
       // /admin prompt:view <template_key>
       const templateKey = args[1];
@@ -2930,6 +3073,7 @@ bot.command('admin', async (ctx) => {
         `• \`/admin\` - 대시보드\n` +
         `• \`/admin user:search <user_id>\` - 사용자 검색\n` +
         `• \`/admin credit:grant <user_id> <amount> <reason>\` - 크레딧 지급\n` +
+        `• \`/admin feedback [days]\` - 사용자 피드백 통계\n` +
         `• \`/admin prompt:add\` - 새 프롬프트 추가\n` +
         `• \`/admin prompt:list [category]\` - 프롬프트 목록\n` +
         `• \`/admin prompt:view <key>\` - 프롬프트 상세\n` +
