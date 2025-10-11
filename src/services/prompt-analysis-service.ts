@@ -532,11 +532,18 @@ export async function rejectAnalysis(
  * Escape special Markdown characters
  */
 function escapeMarkdown(text: string): string {
-  // Remove emojis first
-  text = text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '');
+  // Remove ALL emojis and special symbols (more comprehensive)
+  text = text.replace(/[\u{1F000}-\u{1F9FF}]|[\u{2000}-\u{27FF}]|[\u{E000}-\u{F8FF}]|[\u{FE00}-\u{FEFF}]/gu, '');
 
-  // Escape Markdown special characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
-  return text.replace(/([_*\[\]()~`>#+=|{}.!\\-])/g, '\\$1');
+  // Remove zero-width joiners and variation selectors
+  text = text.replace(/[\u200D\uFE0F]/gu, '');
+
+  // Clean up extra spaces
+  text = text.replace(/\s+/g, ' ').trim();
+
+  // Only escape critical Markdown characters: _ * [ ]
+  // Don't escape () since it breaks readability
+  return text.replace(/([_*\[\]`])/g, '\\$1');
 }
 
 /**
