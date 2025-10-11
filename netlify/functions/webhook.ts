@@ -1644,20 +1644,24 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       // Handle error
       let errorMsg = editResult.error || 'Unknown error';
 
-      // Shorten error message if it's too long (Cloudflare HTML responses)
-      if (errorMsg.length > 200) {
-        if (errorMsg.includes('Cloudflare') || errorMsg.includes('403')) {
-          errorMsg = 'Replicate API 접근이 차단되었습니다 (Cloudflare 403). 잠시 후 다시 시도해주세요.';
-        } else {
-          errorMsg = errorMsg.substring(0, 200) + '...';
-        }
+      // User-friendly error messages
+      if (errorMsg.includes('timeout') || errorMsg.includes('ETIMEDOUT')) {
+        errorMsg = '⏱️ 서버 응답 시간 초과\n잠시 후 다시 시도해주세요.';
+      } else if (errorMsg.includes('Failed to download image')) {
+        errorMsg = '📥 이미지 다운로드 실패\n네트워크 연결을 확인하고 다시 시도해주세요.';
+      } else if (errorMsg.includes('Cloudflare') || errorMsg.includes('403')) {
+        errorMsg = '🚫 API 접근 차단 (Cloudflare 403)\n잠시 후 다시 시도해주세요.';
+      } else if (errorMsg.includes('quota') || errorMsg.includes('limit')) {
+        errorMsg = '📊 API 사용량 한도 초과\n잠시 후 다시 시도해주세요.';
+      } else if (errorMsg.length > 200) {
+        errorMsg = errorMsg.substring(0, 200) + '...';
       }
 
       await ctx.api.editMessageText(
         ctx.chat!.id,
         processingMsg.message_id,
         `❌ **편집 실패**\n\n` +
-        `오류: ${errorMsg}\n\n` +
+        `${errorMsg}\n\n` +
         `💡 다른 스타일을 시도하거나 나중에 다시 시도해주세요.`
       );
 

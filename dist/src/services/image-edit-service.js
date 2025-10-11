@@ -76,13 +76,36 @@ async function editImageWithTemplate(request) {
         console.log('🎨 Starting image editing with Gemini...');
         console.log(`📝 Template: ${request.templateName}`);
         console.log(`📋 Category: ${request.category}`);
-        // Download image to buffer
-        const imageResponse = await fetch(request.imageUrl);
-        if (!imageResponse.ok) {
-            throw new Error(`Failed to download image: ${imageResponse.status}`);
+        // Download image to buffer with timeout and retry
+        let imageBuffer;
+        let retries = 3;
+        let lastError = null;
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                console.log(`🔄 Downloading image (attempt ${attempt}/${retries})...`);
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 15000); // 15초 타임아웃
+                const imageResponse = await fetch(request.imageUrl, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeout);
+                if (!imageResponse.ok) {
+                    throw new Error(`Failed to download image: ${imageResponse.status}`);
+                }
+                imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+                console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
+                break; // 성공하면 루프 탈출
+            }
+            catch (error) {
+                lastError = error;
+                console.error(`❌ Download attempt ${attempt} failed:`, error);
+                if (attempt === retries) {
+                    throw new Error(`Failed to download image after ${retries} attempts: ${lastError.message}`);
+                }
+                // 재시도 전 1초 대기
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
-        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-        console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
         // Create enhanced editing prompt with category-specific instructions
         const categoryInstructions = getCategoryInstructions(request.category);
         const editPrompt = `${request.templatePrompt}
