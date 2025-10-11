@@ -195,8 +195,20 @@ export async function analyzePromptWithLLM(
       throw new Error('No text response from Claude');
     }
 
+    // Clean response text (remove markdown code blocks if present)
+    let cleanText = textContent.text.trim();
+
+    // Remove ```json and ``` markers if present
+    if (cleanText.startsWith('```json')) {
+      cleanText = cleanText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+    } else if (cleanText.startsWith('```')) {
+      cleanText = cleanText.replace(/^```\s*/, '').replace(/```\s*$/, '');
+    }
+
+    cleanText = cleanText.trim();
+
     // Parse JSON response
-    const result = JSON.parse(textContent.text) as PromptAnalysisResult;
+    const result = JSON.parse(cleanText) as PromptAnalysisResult;
 
     console.log('✅ Prompt analysis complete');
     console.log(`   Title: ${result.title_ko}`);

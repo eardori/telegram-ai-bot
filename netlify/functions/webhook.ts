@@ -2933,48 +2933,51 @@ bot.on('message:text', async (ctx, next) => {
     }
 
     const rawPrompt = ctx.message.text;
+    const chatId = ctx.chat.id;
 
-    try {
-      await ctx.reply('🔄 프롬프트를 분석 중입니다... (5-10초 소요)');
+    // Immediately respond and clear state
+    await ctx.reply('🔄 프롬프트를 분석 중입니다...\n\n⏱️ 10-20초 정도 소요됩니다. 잠시만 기다려주세요!');
+    userStates.delete(userId);
 
-      const {
-        analyzePromptWithLLM,
-        saveAnalysisToQueue,
-        formatAnalysisResult
-      } = await import('../../src/services/prompt-analysis-service');
+    // Process analysis in background (non-blocking)
+    (async () => {
+      try {
+        const {
+          analyzePromptWithLLM,
+          saveAnalysisToQueue,
+          formatAnalysisResult
+        } = await import('../../src/services/prompt-analysis-service');
 
-      // LLM 분석
-      const analysis = await analyzePromptWithLLM(rawPrompt);
+        // LLM 분석
+        const analysis = await analyzePromptWithLLM(rawPrompt);
 
-      // 대기열에 저장
-      const queueId = await saveAnalysisToQueue(userId, rawPrompt, analysis);
+        // 대기열에 저장
+        const queueId = await saveAnalysisToQueue(userId, rawPrompt, analysis);
 
-      // 결과 표시
-      const message = formatAnalysisResult(analysis);
+        // 결과 표시
+        const message = formatAnalysisResult(analysis);
 
-      const { InlineKeyboard } = await import('grammy');
-      const keyboard = new InlineKeyboard()
-        .text('✅ 승인하고 저장', `approve_prompt:${queueId}`)
-        .row()
-        .text('❌ 거부', `reject_prompt:${queueId}`);
+        const { InlineKeyboard } = await import('grammy');
+        const keyboard = new InlineKeyboard()
+          .text('✅ 승인하고 저장', `approve_prompt:${queueId}`)
+          .row()
+          .text('❌ 거부', `reject_prompt:${queueId}`);
 
-      await ctx.reply(message, {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard
-      });
+        await bot.api.sendMessage(chatId, message, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
 
-      // Clear state
-      userStates.delete(userId);
-
-    } catch (error) {
-      console.error('❌ Error analyzing prompt:', error);
-      await ctx.reply(
-        '❌ 프롬프트 분석 중 오류가 발생했습니다.\n\n' +
-        `오류: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-        '다시 시도하려면 /admin prompt:add 를 입력하세요.'
-      );
-      userStates.delete(userId);
-    }
+      } catch (error) {
+        console.error('❌ Error analyzing prompt:', error);
+        await bot.api.sendMessage(
+          chatId,
+          '❌ 프롬프트 분석 중 오류가 발생했습니다.\n\n' +
+          `오류: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+          '다시 시도하려면 /admin prompt:add 를 입력하세요.'
+        );
+      }
+    })();
 
     return; // Don't call next() - we handled this message
   }
