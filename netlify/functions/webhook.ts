@@ -3257,6 +3257,71 @@ bot.command('test', async (ctx) => {
 🌍 항상 온라인 상태로 운영됩니다!`);
 });
 
+bot.command('test_replicate', async (ctx) => {
+  console.log('🔞 Replicate API test command received');
+
+  // Admin only
+  const ADMIN_USER_IDS = process.env.ADMIN_USER_IDS?.split(',').map(id => parseInt(id)) || [];
+  const userId = ctx.from?.id || 0;
+
+  if (!ADMIN_USER_IDS.includes(userId)) {
+    await ctx.reply('❌ 관리자 권한이 필요합니다.');
+    return;
+  }
+
+  try {
+    await ctx.reply('🔄 **Replicate API 테스트 중...**\n\n📍 Render.com 서버에서 실행\n⏱️ 최대 30초 소요', {
+      parse_mode: 'Markdown'
+    });
+
+    // Dynamic import
+    const { replicateService } = await import('../../src/services/replicate-service');
+
+    // Test with simple prompt and small image size for speed
+    const startTime = Date.now();
+    const result = await replicateService.generateNSFWImage(
+      'a beautiful sunset over the ocean',
+      {
+        width: 512,
+        height: 512,
+        steps: 10  // Faster generation
+      }
+    );
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    // Success
+    await ctx.reply(`✅ **Replicate API 테스트 성공!**
+
+🎯 결과:
+• 생성 시간: ${duration}초
+• 이미지 URL: ${result[0] ? '✅ 생성됨' : '❌ 실패'}
+• 서버: Render.com
+• Cloudflare: ✅ 차단 해제됨
+
+🔗 이미지 링크:
+${result[0] || 'N/A'}`, {
+      parse_mode: 'Markdown'
+    });
+
+    console.log(`✅ Replicate API test successful (${duration}s)`);
+
+  } catch (error) {
+    console.error('❌ Replicate API test failed:', error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    await ctx.reply(`❌ **Replicate API 테스트 실패**
+
+에러: ${errorMessage}
+
+${errorMessage.includes('403') || errorMessage.includes('Forbidden')
+  ? '⚠️ Cloudflare가 여전히 차단 중입니다.\nRender.com 지원팀에 다시 문의가 필요합니다.'
+  : '💡 API 키 또는 네트워크 설정을 확인해주세요.'}`, {
+      parse_mode: 'Markdown'
+    });
+  }
+});
+
 bot.command('summary', async (ctx) => {
   console.log('📝 Summary command received');
   try {
