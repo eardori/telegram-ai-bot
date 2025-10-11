@@ -330,7 +330,7 @@ function formatPromptList(prompts, category) {
         });
     }
     else {
-        // Show detailed list for single category
+        // Show detailed list for single category (깔끔한 텍스트 리스트)
         prompts.forEach((p, idx) => {
             const status = p.is_active ? '✅' : '❌';
             const lastUsed = p.last_used ? formatRelativeTime(new Date(p.last_used)) : '사용 안 됨';
@@ -339,6 +339,7 @@ function formatPromptList(prompts, category) {
             message += `   • 우선순위: ${p.priority} | 사용: ${p.usage_count}회\n`;
             message += `   • 마지막 사용: ${lastUsed}\n\n`;
         });
+        message += `\n💡 프롬프트를 선택하려면:\n\`/admin prompt:view <template_key>\`\n`;
     }
     return message;
 }
@@ -400,15 +401,17 @@ function createPromptDetailKeyboard(templateKey, isActive) {
 function createCategoryKeyboard() {
     const keyboard = new grammy_1.InlineKeyboard();
     keyboard
-        .text('🎨 전체', 'list_prompts:all')
+        .text('전체', 'list_prompts:all')
         .row()
-        .text('🗿 3D 피규어', 'list_prompts:3d_figurine')
-        .text('👔 포트레이트', 'list_prompts:portrait_styling')
+        .text('3D 피규어', 'list_prompts:3d_figurine')
         .row()
-        .text('✂️ 이미지 편집', 'list_prompts:image_editing')
-        .text('🎮 게임/애니', 'list_prompts:game_animation')
+        .text('포트레이트 스타일링', 'list_prompts:portrait_styling')
         .row()
-        .text('🎭 크리에이티브', 'list_prompts:creative_transform');
+        .text('이미지 편집', 'list_prompts:image_editing')
+        .row()
+        .text('게임/애니메이션', 'list_prompts:game_animation')
+        .row()
+        .text('크리에이티브 변환', 'list_prompts:creative_transform');
     return keyboard;
 }
 // =============================================================================
@@ -416,11 +419,11 @@ function createCategoryKeyboard() {
 // =============================================================================
 function getCategoryName(category) {
     const names = {
-        '3d_figurine': '🗿 3D 피규어',
-        'portrait_styling': '👔 포트레이트 스타일링',
-        'image_editing': '✂️ 이미지 편집',
-        'game_animation': '🎮 게임/애니메이션',
-        'creative_transform': '🎭 크리에이티브 변환'
+        '3d_figurine': '3D 피규어',
+        'portrait_styling': '포트레이트 스타일링',
+        'image_editing': '이미지 편집',
+        'game_animation': '게임/애니메이션',
+        'creative_transform': '크리에이티브 변환'
     };
     return names[category] || category;
 }
