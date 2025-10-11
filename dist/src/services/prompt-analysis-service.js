@@ -112,7 +112,16 @@ Analysis rules:
    - game_animation: game, retro_game
    - creative_transform: album, photo_booth, polaroid, business
 
-Respond ONLY with valid JSON. No markdown, no code blocks.
+CRITICAL JSON FORMATTING RULES:
+- Respond ONLY with valid JSON
+- NO markdown code blocks (no \`\`\`json or \`\`\`)
+- ALL string values MUST be properly escaped:
+  * Use \\n for newlines (not actual line breaks)
+  * Use \\" for quotes inside strings
+  * Use \\\\ for backslashes
+- Keep prompt_fragment values SHORT and simple (under 100 characters)
+- Keep description fields SHORT (under 200 characters)
+- If you need to include a long description, break it into shorter warning/suggestion items instead
 `;
 // =============================================================================
 // Core Functions
@@ -148,8 +157,36 @@ async function analyzePromptWithLLM(rawPrompt) {
             cleanText = cleanText.replace(/^```\s*/, '').replace(/```\s*$/, '');
         }
         cleanText = cleanText.trim();
-        // Parse JSON response
-        const result = JSON.parse(cleanText);
+        // Additional safety: Try to fix common JSON issues
+        let result;
+        try {
+            result = JSON.parse(cleanText);
+        }
+        catch (parseError) {
+            console.warn('⚠️ Initial JSON parse failed, attempting repair...');
+            console.warn('Parse error:', parseError instanceof Error ? parseError.message : String(parseError));
+            // Log first 500 chars of problematic JSON for debugging
+            console.warn('Problematic JSON (first 500 chars):', cleanText.substring(0, 500));
+            console.warn('Problematic JSON (chars 6000-6300):', cleanText.substring(6000, 6300));
+            // Attempt common fixes:
+            // 1. Remove unescaped newlines in strings (replace with \n)
+            // 2. Fix unescaped quotes
+            let repairedText = cleanText;
+            // This is a basic repair - replace actual newlines inside quoted strings
+            // Note: This is not perfect but handles most cases
+            repairedText = repairedText.replace(/("(?:[^"\\]|\\.)*?")/g, (match) => {
+                return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+            });
+            try {
+                result = JSON.parse(repairedText);
+                console.log('✅ JSON repair successful');
+            }
+            catch (repairError) {
+                console.error('❌ JSON repair failed');
+                console.error('Repair error:', repairError instanceof Error ? repairError.message : String(repairError));
+                throw new Error(`Failed to parse Claude response as JSON. Original error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+            }
+        }
         console.log('✅ Prompt analysis complete');
         console.log(`   Title: ${result.title_ko}`);
         console.log(`   Category: ${result.category}`);
@@ -159,6 +196,9 @@ async function analyzePromptWithLLM(rawPrompt) {
     }
     catch (error) {
         console.error('❌ Error analyzing prompt:', error);
+        if (error instanceof Error) {
+            console.error('❌ Error stack:', error.stack);
+        }
         throw error;
     }
 }
