@@ -277,9 +277,9 @@ END $$;
 -- Show full list of parameterized templates
 SELECT
     template_key,
-    template_name_ko,
+    template_name,
     COUNT(DISTINCT parameter_key) as parameters,
-    STRING_AGG(DISTINCT parameter_name_ko, ', ') as parameter_names
+    STRING_AGG(DISTINCT parameter_name, ', ') as parameter_names
 FROM template_parameters_full
-GROUP BY template_key, template_name_ko
+GROUP BY template_key, template_name
 ORDER BY template_key;
