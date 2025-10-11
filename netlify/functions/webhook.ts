@@ -1414,8 +1414,8 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
       let message = `🎨 **${template.template_name_ko}**\n\n`;
       message += `📋 **${parameter.parameter_name_ko}**를 선택해주세요:\n\n`;
 
-      // Add option buttons (2 per row) - Remove emoji from button text
-      parameter.options.forEach((option, index) => {
+      // Add option buttons (1 per row for clarity)
+      parameter.options.forEach((option) => {
         // Generate short callback ID to avoid 64-byte limit
         const shortId = generateShortCallbackId({
           templateKey,
@@ -1428,12 +1428,7 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         paramKeyboard.text(
           option.option_name_ko,  // No emoji
           `p:${shortId}`  // Ultra-short format: "p:a1b2c3"
-        );
-
-        // Create new row every 2 buttons
-        if ((index + 1) % 2 === 0 || index === parameter.options.length - 1) {
-          paramKeyboard.row();
-        }
+        ).row();
       });
 
       // Back button
