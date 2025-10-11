@@ -2774,15 +2774,120 @@ bot.command('admin', async (ctx) => {
       // Set user state to awaiting prompt input
       userStates.set(userId, 'awaiting_prompt_input');
 
+    } else if (subcommand === 'prompt:list') {
+      // /admin prompt:list [category]
+      const category = args[1];
+
+      console.log(`📝 Admin listing prompts, category: ${category || 'all'}`);
+
+      const { getPromptList, formatPromptList, createCategoryKeyboard } =
+        await import('../../src/services/admin-prompt-manager');
+
+      const prompts = await getPromptList(category);
+      const message = formatPromptList(prompts, category);
+
+      if (!category) {
+        // Show category selection
+        const keyboard = createCategoryKeyboard();
+        await ctx.reply(message, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
+      } else {
+        await ctx.reply(message, { parse_mode: 'Markdown' });
+      }
+
+    } else if (subcommand.startsWith('prompt:view')) {
+      // /admin prompt:view <template_key>
+      const templateKey = args[1];
+
+      if (!templateKey) {
+        await ctx.reply('❌ Template key를 입력해주세요.\n\n사용법: `/admin prompt:view <template_key>`', { parse_mode: 'Markdown' });
+        return;
+      }
+
+      console.log(`📝 Admin viewing prompt: ${templateKey}`);
+
+      const { getPromptDetail, getPromptStats, formatPromptDetail, createPromptDetailKeyboard } =
+        await import('../../src/services/admin-prompt-manager');
+
+      const prompt = await getPromptDetail(templateKey);
+
+      if (!prompt) {
+        await ctx.reply(`❌ 프롬프트를 찾을 수 없습니다: \`${templateKey}\``, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const stats = await getPromptStats(templateKey);
+      const message = formatPromptDetail(prompt, stats || undefined);
+      const keyboard = createPromptDetailKeyboard(templateKey, prompt.is_active);
+
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+
+    } else if (subcommand.startsWith('prompt:toggle')) {
+      // /admin prompt:toggle <template_key>
+      const templateKey = args[1];
+
+      if (!templateKey) {
+        await ctx.reply('❌ Template key를 입력해주세요.\n\n사용법: `/admin prompt:toggle <template_key>`', { parse_mode: 'Markdown' });
+        return;
+      }
+
+      console.log(`📝 Admin toggling prompt status: ${templateKey}`);
+
+      const { togglePromptStatus } = await import('../../src/services/admin-prompt-manager');
+
+      const result = await togglePromptStatus(templateKey);
+
+      await ctx.reply(
+        result.success
+          ? `✅ ${result.message}\n\n상태: ${result.is_active ? '✅ 활성' : '❌ 비활성'}`
+          : `❌ ${result.message}`,
+        { parse_mode: 'Markdown' }
+      );
+
+    } else if (subcommand.startsWith('prompt:priority')) {
+      // /admin prompt:priority <template_key> <priority>
+      const templateKey = args[1];
+      const priority = parseInt(args[2] || '0');
+
+      if (!templateKey || isNaN(priority)) {
+        await ctx.reply(
+          '❌ 올바른 형식으로 입력해주세요.\n\n' +
+          '사용법: `/admin prompt:priority <template_key> <priority>`\n' +
+          '우선순위: 0-100 사이의 숫자',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      console.log(`📝 Admin updating prompt priority: ${templateKey} → ${priority}`);
+
+      const { updatePromptPriority } = await import('../../src/services/admin-prompt-manager');
+
+      const result = await updatePromptPriority(templateKey, priority);
+
+      await ctx.reply(
+        result.success ? `✅ ${result.message}` : `❌ ${result.message}`,
+        { parse_mode: 'Markdown' }
+      );
+
     } else {
       // Unknown subcommand
       await ctx.reply(
         `❌ 알 수 없는 관리자 명령어입니다.\n\n` +
         `**사용 가능한 명령어:**\n` +
-        `• \`/admin\` 또는 \`/admin dashboard [24h|7d|30d]\` - 대시보드\n` +
+        `• \`/admin\` - 대시보드\n` +
         `• \`/admin user:search <user_id>\` - 사용자 검색\n` +
         `• \`/admin credit:grant <user_id> <amount> <reason>\` - 크레딧 지급\n` +
-        `• \`/admin prompt:add\` - 새 프롬프트 추가`,
+        `• \`/admin prompt:add\` - 새 프롬프트 추가\n` +
+        `• \`/admin prompt:list [category]\` - 프롬프트 목록\n` +
+        `• \`/admin prompt:view <key>\` - 프롬프트 상세\n` +
+        `• \`/admin prompt:toggle <key>\` - 활성화/비활성화\n` +
+        `• \`/admin prompt:priority <key> <0-100>\` - 우선순위 변경`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -2921,6 +3026,127 @@ bot.callbackQuery(/^reject_prompt:(\d+)$/, async (ctx) => {
   } catch (error) {
     console.error('❌ Error rejecting prompt:', error);
     await ctx.reply('❌ 오류가 발생했습니다.');
+  }
+});
+
+/**
+ * Callback: List prompts by category
+ */
+bot.callbackQuery(/^list_prompts:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+
+  const category = ctx.match[1] === 'all' ? undefined : ctx.match[1];
+
+  try {
+    const { getPromptList, formatPromptList } = await import('../../src/services/admin-prompt-manager');
+
+    const prompts = await getPromptList(category);
+    const message = formatPromptList(prompts, category);
+
+    await ctx.editMessageText(message, { parse_mode: 'Markdown' });
+
+  } catch (error) {
+    console.error('❌ Error listing prompts:', error);
+    await ctx.reply('❌ 프롬프트 목록을 불러올 수 없습니다.');
+  }
+});
+
+/**
+ * Callback: Toggle prompt status
+ */
+bot.callbackQuery(/^toggle_prompt:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+
+  const templateKey = ctx.match[1];
+
+  try {
+    const { togglePromptStatus, getPromptDetail, getPromptStats, formatPromptDetail, createPromptDetailKeyboard } =
+      await import('../../src/services/admin-prompt-manager');
+
+    const result = await togglePromptStatus(templateKey);
+
+    if (result.success) {
+      // Refresh the detail view
+      const prompt = await getPromptDetail(templateKey);
+      if (prompt) {
+        const stats = await getPromptStats(templateKey);
+        const message = formatPromptDetail(prompt, stats || undefined);
+        const keyboard = createPromptDetailKeyboard(templateKey, prompt.is_active);
+
+        await ctx.editMessageText(message, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
+      }
+
+      await ctx.answerCallbackQuery(`✅ ${result.message}`);
+    } else {
+      await ctx.answerCallbackQuery(`❌ ${result.message}`);
+    }
+
+  } catch (error) {
+    console.error('❌ Error toggling prompt:', error);
+    await ctx.answerCallbackQuery('❌ 오류가 발생했습니다.');
+  }
+});
+
+/**
+ * Callback: Show prompt stats
+ */
+bot.callbackQuery(/^stats_prompt:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+
+  const templateKey = ctx.match[1];
+
+  try {
+    const { getPromptStats } = await import('../../src/services/admin-prompt-manager');
+
+    const stats = await getPromptStats(templateKey);
+
+    if (!stats) {
+      await ctx.reply('❌ 통계를 불러올 수 없습니다.');
+      return;
+    }
+
+    const message = `📊 **프롬프트 사용 통계**\n\n` +
+      `Template: \`${templateKey}\`\n\n` +
+      `**사용 현황:**\n` +
+      `• 총 사용: ${stats.usage_count}회\n` +
+      `• 성공: ${stats.success_count}회 (${stats.success_rate.toFixed(1)}%)\n` +
+      `• 실패: ${stats.failure_count}회\n` +
+      `• 평균 처리 시간: ${stats.avg_processing_time.toFixed(1)}초\n` +
+      `• 마지막 사용: ${stats.last_used ? new Date(stats.last_used).toLocaleString('ko-KR') : '사용 안 됨'}`;
+
+    await ctx.reply(message, { parse_mode: 'Markdown' });
+
+  } catch (error) {
+    console.error('❌ Error getting prompt stats:', error);
+    await ctx.reply('❌ 통계를 불러올 수 없습니다.');
+  }
+});
+
+/**
+ * Callback: Back to prompt list
+ */
+bot.callbackQuery('prompt_list', async (ctx) => {
+  await ctx.answerCallbackQuery();
+
+  try {
+    const { getPromptList, formatPromptList, createCategoryKeyboard } =
+      await import('../../src/services/admin-prompt-manager');
+
+    const prompts = await getPromptList();
+    const message = formatPromptList(prompts);
+    const keyboard = createCategoryKeyboard();
+
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+
+  } catch (error) {
+    console.error('❌ Error returning to prompt list:', error);
+    await ctx.reply('❌ 목록을 불러올 수 없습니다.');
   }
 });
 
