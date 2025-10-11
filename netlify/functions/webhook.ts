@@ -1339,24 +1339,19 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         return;
       }
 
-      // Create paginated keyboard with all templates (6 per page, 2 rows of 3)
+      // Create paginated keyboard with all templates (한 줄에 1개씩, 이모티콘 제거)
       const keyboard = new InlineKeyboard();
-      const templatesPerPage = 6;
+      const templatesPerPage = 8; // 페이지당 8개로 증가
       const totalPages = Math.ceil(allTemplates.length / templatesPerPage);
       const pageTemplates = allTemplates.slice(0, templatesPerPage);
 
-      // Add template buttons (2 rows of 3)
-      for (let i = 0; i < pageTemplates.length; i += 3) {
-        const row = pageTemplates.slice(i, i + 3);
-        row.forEach(template => {
-          const emoji = getCategoryEmoji(template.category);
-          keyboard.text(
-            `${emoji} ${template.template_name_ko}`,
-            `t:${template.template_key}:${fileKey}`
-          );
-        });
-        keyboard.row();
-      }
+      // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+      pageTemplates.forEach(template => {
+        keyboard.text(
+          template.template_name_ko, // 이모티콘 제거
+          `t:${template.template_key}:${fileKey}`
+        ).row();
+      });
 
       // Navigation buttons
       keyboard.row();
@@ -2247,7 +2242,7 @@ bot.callbackQuery(/^tp:(\d+):(.+):(.+)$/, async (ctx) => {
     }
 
     // Pagination settings
-    const templatesPerPage = 6; // 2 rows of 3
+    const templatesPerPage = 8; // 한 줄에 1개씩
     const totalPages = Math.ceil(allTemplates.length / templatesPerPage);
     const start = page * templatesPerPage;
     const end = start + templatesPerPage;
@@ -2256,12 +2251,13 @@ bot.callbackQuery(/^tp:(\d+):(.+):(.+)$/, async (ctx) => {
     // Create keyboard
     const keyboard = new InlineKeyboard();
 
-    // Add template buttons using smart layout (without emojis)
-    const templateButtons = pageTemplates.map(template => ({
-      text: template.template_name_ko,
-      data: `t:${template.template_key}:${fileKey}`
-    }));
-    addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
+    // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+    pageTemplates.forEach(template => {
+      keyboard.text(
+        template.template_name_ko,
+        `t:${template.template_key}:${fileKey}`
+      ).row();
+    });
 
     // Navigation buttons
     keyboard.row();
@@ -2325,7 +2321,7 @@ bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
     }
 
     // Pagination settings
-    const templatesPerPage = 6;
+    const templatesPerPage = 8;
     const totalPages = Math.ceil(templates.length / templatesPerPage);
     const start = page * templatesPerPage;
     const end = start + templatesPerPage;
@@ -2334,12 +2330,13 @@ bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
     // Create keyboard
     const keyboard = new InlineKeyboard();
 
-    // Add template buttons using smart layout (without emojis)
-    const templateButtons = pageTemplates.map(template => ({
-      text: template.template_name_ko,
-      data: `t:${template.template_key}:${fileKey}`
-    }));
-    addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
+    // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+    pageTemplates.forEach(template => {
+      keyboard.text(
+        template.template_name_ko,
+        `t:${template.template_key}:${fileKey}`
+      ).row();
+    });
 
     // Navigation buttons
     keyboard.row();
@@ -2424,20 +2421,22 @@ bot.callbackQuery(/^cat:([^:]+):(.+):(.+)$/, async (ctx) => {
       return;
     }
 
-    // Create keyboard with category templates (6 per page, 2 rows of 3)
+    // Create keyboard with category templates (한 줄에 1개씩)
     const fileKey = `${chatId}:${messageId}`;
     const keyboard = new InlineKeyboard();
-    const templatesPerPage = 6;
+    const templatesPerPage = 8;
     const pageTemplates = templates.slice(0, templatesPerPage);
 
-    // Add template buttons using smart layout (without emojis)
-    const templateButtons = pageTemplates.map(template => ({
-      text: template.template_name_ko,
-      data: `t:${template.template_key}:${fileKey}`
-    }));
-    addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
+    // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+    pageTemplates.forEach(template => {
+      keyboard.text(
+        template.template_name_ko,
+        `t:${template.template_key}:${fileKey}`
+      ).row();
+    });
 
-    // Add pagination if more than 6 templates
+    // Add pagination if more than 8 templates
+    keyboard.row();
     if (templates.length > templatesPerPage) {
       keyboard.text('➡️ 다음', `catp:${category}:1:${fileKey}`);
     }

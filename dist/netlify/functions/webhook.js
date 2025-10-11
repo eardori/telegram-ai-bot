@@ -1110,20 +1110,16 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 await ctx.reply('❌ 템플릿 목록을 가져오는 중 오류가 발생했습니다.');
                 return;
             }
-            // Create paginated keyboard with all templates (6 per page, 2 rows of 3)
+            // Create paginated keyboard with all templates (한 줄에 1개씩, 이모티콘 제거)
             const keyboard = new grammy_1.InlineKeyboard();
-            const templatesPerPage = 6;
+            const templatesPerPage = 8; // 페이지당 8개로 증가
             const totalPages = Math.ceil(allTemplates.length / templatesPerPage);
             const pageTemplates = allTemplates.slice(0, templatesPerPage);
-            // Add template buttons (2 rows of 3)
-            for (let i = 0; i < pageTemplates.length; i += 3) {
-                const row = pageTemplates.slice(i, i + 3);
-                row.forEach(template => {
-                    const emoji = getCategoryEmoji(template.category);
-                    keyboard.text(`${emoji} ${template.template_name_ko}`, `t:${template.template_key}:${fileKey}`);
-                });
-                keyboard.row();
-            }
+            // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+            pageTemplates.forEach(template => {
+                keyboard.text(template.template_name_ko, // 이모티콘 제거
+                `t:${template.template_key}:${fileKey}`).row();
+            });
             // Navigation buttons
             keyboard.row();
             keyboard.text(`1/${totalPages}`, `noop`);
@@ -1802,19 +1798,17 @@ bot.callbackQuery(/^tp:(\d+):(.+):(.+)$/, async (ctx) => {
             return;
         }
         // Pagination settings
-        const templatesPerPage = 6; // 2 rows of 3
+        const templatesPerPage = 8; // 한 줄에 1개씩
         const totalPages = Math.ceil(allTemplates.length / templatesPerPage);
         const start = page * templatesPerPage;
         const end = start + templatesPerPage;
         const pageTemplates = allTemplates.slice(start, end);
         // Create keyboard
         const keyboard = new grammy_1.InlineKeyboard();
-        // Add template buttons using smart layout (without emojis)
-        const templateButtons = pageTemplates.map(template => ({
-            text: template.template_name_ko,
-            data: `t:${template.template_key}:${fileKey}`
-        }));
-        addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
+        // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+        pageTemplates.forEach(template => {
+            keyboard.text(template.template_name_ko, `t:${template.template_key}:${fileKey}`).row();
+        });
         // Navigation buttons
         keyboard.row();
         if (page > 0) {
@@ -1865,19 +1859,17 @@ bot.callbackQuery(/^catp:([^:]+):(\d+):(.+):(.+)$/, async (ctx) => {
             return;
         }
         // Pagination settings
-        const templatesPerPage = 6;
+        const templatesPerPage = 8;
         const totalPages = Math.ceil(templates.length / templatesPerPage);
         const start = page * templatesPerPage;
         const end = start + templatesPerPage;
         const pageTemplates = templates.slice(start, end);
         // Create keyboard
         const keyboard = new grammy_1.InlineKeyboard();
-        // Add template buttons using smart layout (without emojis)
-        const templateButtons = pageTemplates.map(template => ({
-            text: template.template_name_ko,
-            data: `t:${template.template_key}:${fileKey}`
-        }));
-        addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
+        // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+        pageTemplates.forEach(template => {
+            keyboard.text(template.template_name_ko, `t:${template.template_key}:${fileKey}`).row();
+        });
         // Navigation buttons
         keyboard.row();
         if (page > 0) {
@@ -1945,18 +1937,17 @@ bot.callbackQuery(/^cat:([^:]+):(.+):(.+)$/, async (ctx) => {
             await ctx.reply(`❌ ${categoryName} 카테고리의 템플릿을 찾을 수 없습니다.`);
             return;
         }
-        // Create keyboard with category templates (6 per page, 2 rows of 3)
+        // Create keyboard with category templates (한 줄에 1개씩)
         const fileKey = `${chatId}:${messageId}`;
         const keyboard = new grammy_1.InlineKeyboard();
-        const templatesPerPage = 6;
+        const templatesPerPage = 8;
         const pageTemplates = templates.slice(0, templatesPerPage);
-        // Add template buttons using smart layout (without emojis)
-        const templateButtons = pageTemplates.map(template => ({
-            text: template.template_name_ko,
-            data: `t:${template.template_key}:${fileKey}`
-        }));
-        addButtonsWithSmartLayout(keyboard, templateButtons, { preferredPerRow: 2 });
-        // Add pagination if more than 6 templates
+        // Add template buttons (한 줄에 1개씩, 이모티콘 없이)
+        pageTemplates.forEach(template => {
+            keyboard.text(template.template_name_ko, `t:${template.template_key}:${fileKey}`).row();
+        });
+        // Add pagination if more than 8 templates
+        keyboard.row();
         if (templates.length > templatesPerPage) {
             keyboard.text('➡️ 다음', `catp:${category}:1:${fileKey}`);
         }
