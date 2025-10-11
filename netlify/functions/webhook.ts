@@ -3309,14 +3309,22 @@ ${result[0] || 'N/A'}`, {
     console.error('❌ Replicate API test failed:', error);
 
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const is403 = errorMessage.includes('403') || errorMessage.includes('Forbidden');
 
     await ctx.reply(`❌ **Replicate API 테스트 실패**
 
-에러: ${errorMessage}
+🔍 상태: ${is403 ? '403 Forbidden (Cloudflare 차단)' : '알 수 없는 오류'}
+📍 서버: Render.com (IP: 54.254.162.138)
+⏰ 시각: ${new Date().toISOString()}
 
-${errorMessage.includes('403') || errorMessage.includes('Forbidden')
-  ? '⚠️ Cloudflare가 여전히 차단 중입니다.\nRender.com 지원팀에 다시 문의가 필요합니다.'
-  : '💡 API 키 또는 네트워크 설정을 확인해주세요.'}`, {
+${is403
+  ? '🚨 **Cloudflare가 여전히 Render.com IP를 차단 중입니다**\n\n' +
+    '다음 정보를 Render.com 지원팀에 전달하세요:\n' +
+    '• Cloudflare Ray ID: 98cd61199e8587a0\n' +
+    '• Blocked IP: 54.254.162.138\n' +
+    '• Target: api.replicate.com\n' +
+    '• Issue: 403 Forbidden (IP still blacklisted)'
+  : `💡 API 키 또는 네트워크 설정을 확인해주세요.\n에러: ${errorMessage.substring(0, 200)}`}`, {
       parse_mode: 'Markdown'
     });
   }
