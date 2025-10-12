@@ -87,7 +87,7 @@ CREATE OR REPLACE FUNCTION get_template_stats(
 )
 RETURNS TABLE (
   -- Basic info
-  template_key TEXT,
+  out_template_key TEXT,
   template_name TEXT,
   category TEXT,
   is_active BOOLEAN,
@@ -141,16 +141,16 @@ BEGIN
       COUNT(*) as total,
       COUNT(CASE WHEN satisfied = true THEN 1 END) as positive,
       MAX(created_at) as last_feedback
-    FROM template_feedback
-    WHERE template_key = p_template_key
+    FROM template_feedback tf
+    WHERE tf.template_key = p_template_key
   ),
   recent_feedback_stats AS (
     SELECT
       COUNT(*) as total,
       COUNT(CASE WHEN satisfied = true THEN 1 END) as positive
-    FROM template_feedback
-    WHERE template_key = p_template_key
-      AND created_at >= NOW() - (p_days || ' days')::INTERVAL
+    FROM template_feedback tf
+    WHERE tf.template_key = p_template_key
+      AND tf.created_at >= NOW() - (p_days || ' days')::INTERVAL
   )
   SELECT
     pt.template_key,
@@ -206,7 +206,7 @@ CREATE OR REPLACE FUNCTION get_popular_templates(
 )
 RETURNS TABLE (
   rank INT,
-  template_key TEXT,
+  out_template_key TEXT,
   template_name TEXT,
   uses BIGINT,
   satisfaction_rate NUMERIC
@@ -227,14 +227,14 @@ BEGIN
   ),
   feedback_rates AS (
     SELECT
-      template_key,
+      tf.template_key,
       ROUND(
         COUNT(CASE WHEN satisfied = true THEN 1 END)::DECIMAL / COUNT(*) * 100,
         2
       ) as sat_rate
-    FROM template_feedback
-    WHERE created_at >= NOW() - (p_days || ' days')::INTERVAL
-    GROUP BY template_key
+    FROM template_feedback tf
+    WHERE tf.created_at >= NOW() - (p_days || ' days')::INTERVAL
+    GROUP BY tf.template_key
   )
   SELECT
     ROW_NUMBER() OVER (ORDER BY uc.use_count DESC)::INT,
