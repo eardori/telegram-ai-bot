@@ -13,14 +13,14 @@
 CREATE OR REPLACE VIEW v_prompt_usage_stats AS
 WITH usage_data AS (
   SELECT
-    ct.template_key,
+    ct.related_template_key as template_key,
     COUNT(*) as total_uses,
     MAX(ct.created_at) as last_used_at,
     MIN(ct.created_at) as first_used_at
   FROM credit_transactions ct
   WHERE ct.transaction_type = 'usage'
-    AND ct.template_key IS NOT NULL
-  GROUP BY ct.template_key
+    AND ct.related_template_key IS NOT NULL
+  GROUP BY ct.related_template_key
 ),
 feedback_data AS (
   SELECT
@@ -65,16 +65,16 @@ ORDER BY COALESCE(ud.total_uses, 0) DESC;
 
 CREATE OR REPLACE VIEW v_recent_prompt_usage AS
 SELECT
-  ct.template_key,
+  ct.related_template_key as template_key,
   pt.template_name_ko as template_name,
   COUNT(*) as uses_last_7d
 FROM credit_transactions ct
-LEFT JOIN prompt_templates pt ON ct.template_key = pt.template_key
+LEFT JOIN prompt_templates pt ON ct.related_template_key = pt.template_key
 WHERE
   ct.transaction_type = 'usage'
   AND ct.created_at >= NOW() - INTERVAL '7 days'
-  AND ct.template_key IS NOT NULL
-GROUP BY ct.template_key, pt.template_name_ko
+  AND ct.related_template_key IS NOT NULL
+GROUP BY ct.related_template_key, pt.template_name_ko
 ORDER BY uses_last_7d DESC;
 
 -- =====================================================
@@ -125,14 +125,14 @@ BEGIN
       MIN(ct.created_at) as first_use,
       MAX(ct.created_at) as last_use
     FROM credit_transactions ct
-    WHERE ct.template_key = p_template_key
+    WHERE ct.related_template_key = p_template_key
       AND ct.transaction_type = 'usage'
   ),
   recent_stats AS (
     SELECT
       COUNT(*) as total
     FROM credit_transactions ct
-    WHERE ct.template_key = p_template_key
+    WHERE ct.related_template_key = p_template_key
       AND ct.transaction_type = 'usage'
       AND ct.created_at >= NOW() - (p_days || ' days')::INTERVAL
   ),
@@ -215,15 +215,15 @@ BEGIN
   RETURN QUERY
   WITH usage_counts AS (
     SELECT
-      ct.template_key,
+      ct.related_template_key as template_key,
       pt.template_name_ko,
       COUNT(*) as use_count
     FROM credit_transactions ct
-    LEFT JOIN prompt_templates pt ON ct.template_key = pt.template_key
+    LEFT JOIN prompt_templates pt ON ct.related_template_key = pt.template_key
     WHERE ct.transaction_type = 'usage'
       AND ct.created_at >= NOW() - (p_days || ' days')::INTERVAL
-      AND ct.template_key IS NOT NULL
-    GROUP BY ct.template_key, pt.template_name_ko
+      AND ct.related_template_key IS NOT NULL
+    GROUP BY ct.related_template_key, pt.template_name_ko
   ),
   feedback_rates AS (
     SELECT
