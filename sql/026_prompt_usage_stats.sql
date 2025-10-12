@@ -153,9 +153,9 @@ BEGIN
       AND tf.created_at >= NOW() - (p_days || ' days')::INTERVAL
   )
   SELECT
-    pt.template_key,
-    pt.template_name_ko,
-    pt.category,
+    pt.template_key::TEXT,
+    pt.template_name_ko::TEXT,
+    pt.category::TEXT,
     pt.is_active,
 
     -- Overall
@@ -238,8 +238,8 @@ BEGIN
   )
   SELECT
     ROW_NUMBER() OVER (ORDER BY uc.use_count DESC)::INT,
-    uc.template_key,
-    uc.template_name_ko,
+    uc.template_key::TEXT,
+    uc.template_name_ko::TEXT,
     uc.use_count,
     COALESCE(fr.sat_rate, 0)
   FROM usage_counts uc
