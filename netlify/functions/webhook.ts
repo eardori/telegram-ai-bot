@@ -2850,6 +2850,7 @@ bot.command('help', async (ctx) => {
     helpMessage += `**🎨 프롬프트 관리:**\n`;
     helpMessage += `• /admin prompt:add - 새 프롬프트 추가 (LLM 분석)\n`;
     helpMessage += `• /admin prompt:list [category] - 프롬프트 목록\n`;
+    helpMessage += `• /admin prompt:stats <key> [days] - 템플릿 상세 통계\n`;
     helpMessage += `• /admin prompt:view <key> - 프롬프트 상세\n`;
     helpMessage += `• /admin prompt:toggle <key> - 활성화/비활성화\n\n`;
 
@@ -3089,6 +3090,110 @@ bot.command('admin', async (ctx) => {
 
       await ctx.reply(message, { parse_mode: 'Markdown' });
 
+    } else if (subcommand.startsWith('prompt:stats')) {
+      // /admin prompt:stats <template_key> [days]
+      const templateKey = args[1];
+      const days = parseInt(args[2]) || 30;
+
+      if (!templateKey) {
+        await ctx.reply('❌ Template key를 입력해주세요.\n\n사용법: `/admin prompt:stats <template_key> [days]`\n예시: `/admin prompt:stats pixar_3d 30`', { parse_mode: 'Markdown' });
+        return;
+      }
+
+      console.log(`📊 Admin viewing prompt stats: ${templateKey}, ${days} days`);
+
+      // Get detailed stats from database
+      const { data: statsData, error: statsError } = await supabase
+        .rpc('get_template_stats', {
+          p_template_key: templateKey,
+          p_days: days
+        });
+
+      if (statsError || !statsData || statsData.length === 0) {
+        console.error('❌ Error fetching prompt stats:', statsError);
+        await ctx.reply(`❌ 템플릿 통계를 가져오는데 실패했습니다: \`${templateKey}\``, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const stats = statsData[0];
+
+      // Format message
+      let message = `📊 **템플릿 상세 통계**\n\n`;
+      message += `**템플릿:** ${stats.template_name}\n`;
+      message += `**Key:** \`${stats.template_key}\`\n`;
+      message += `**카테고리:** ${stats.category}\n`;
+      message += `**상태:** ${stats.is_active ? '✅ 활성' : '❌ 비활성'}\n\n`;
+
+      message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      // Overall stats
+      message += `**📈 전체 통계**\n`;
+      message += `• 총 사용: ${stats.total_uses || 0}회\n`;
+      if (stats.success_rate !== null) {
+        const emoji = stats.success_rate >= 90 ? '🟢' : stats.success_rate >= 70 ? '🟡' : '🔴';
+        message += `• 성공률: ${emoji} ${stats.success_rate}%\n`;
+      }
+      if (stats.satisfaction_rate !== null && stats.total_feedback > 0) {
+        const emoji = stats.satisfaction_rate >= 80 ? '🟢' : stats.satisfaction_rate >= 60 ? '🟡' : '🔴';
+        message += `• 만족도: ${emoji} ${stats.satisfaction_rate}% (${stats.total_feedback}건 피드백)\n`;
+      }
+      if (stats.avg_processing_time_ms) {
+        message += `• 평균 처리시간: ${Math.round(stats.avg_processing_time_ms / 1000)}초\n`;
+      }
+      message += `\n`;
+
+      // Recent stats
+      message += `**📅 최근 ${days}일**\n`;
+      message += `• 사용: ${stats.recent_uses || 0}회\n`;
+      if (stats.recent_success_rate !== null && stats.recent_uses > 0) {
+        const emoji = stats.recent_success_rate >= 90 ? '🟢' : stats.recent_success_rate >= 70 ? '🟡' : '🔴';
+        message += `• 성공률: ${emoji} ${stats.recent_success_rate}%\n`;
+      }
+      if (stats.recent_satisfaction_rate !== null && stats.recent_feedback > 0) {
+        const emoji = stats.recent_satisfaction_rate >= 80 ? '🟢' : stats.recent_satisfaction_rate >= 60 ? '🟡' : '🔴';
+        message += `• 만족도: ${emoji} ${stats.recent_satisfaction_rate}% (${stats.recent_feedback}건)\n`;
+      }
+      if (stats.recent_avg_processing_time_ms) {
+        message += `• 평균 처리시간: ${Math.round(stats.recent_avg_processing_time_ms / 1000)}초\n`;
+      }
+      message += `\n`;
+
+      // Trend analysis
+      if (stats.success_rate !== null && stats.recent_success_rate !== null) {
+        const successDiff = stats.recent_success_rate - stats.success_rate;
+        if (Math.abs(successDiff) >= 5) {
+          const trendEmoji = successDiff > 0 ? '📈' : '📉';
+          message += `${trendEmoji} **성공률 트렌드:** ${successDiff > 0 ? '+' : ''}${successDiff.toFixed(1)}%\n`;
+        }
+      }
+
+      if (stats.satisfaction_rate !== null && stats.recent_satisfaction_rate !== null) {
+        const satDiff = stats.recent_satisfaction_rate - stats.satisfaction_rate;
+        if (Math.abs(satDiff) >= 5) {
+          const trendEmoji = satDiff > 0 ? '📈' : '📉';
+          message += `${trendEmoji} **만족도 트렌드:** ${satDiff > 0 ? '+' : ''}${satDiff.toFixed(1)}%\n`;
+        }
+      }
+
+      if (stats.first_used_at) {
+        message += `\n**📅 타임라인**\n`;
+        const firstUsed = new Date(stats.first_used_at);
+        const lastUsed = stats.last_used_at ? new Date(stats.last_used_at) : null;
+        message += `• 첫 사용: ${firstUsed.toLocaleDateString('ko-KR')}\n`;
+        if (lastUsed) {
+          message += `• 최근 사용: ${lastUsed.toLocaleDateString('ko-KR')}\n`;
+        }
+        if (stats.last_feedback_at) {
+          const lastFeedback = new Date(stats.last_feedback_at);
+          message += `• 최근 피드백: ${lastFeedback.toLocaleDateString('ko-KR')}\n`;
+        }
+      }
+
+      message += `\n사용법: \`/admin prompt:stats <key> [days]\`\n`;
+      message += `다른 기간: \`/admin prompt:stats ${templateKey} 7\` (7일)`;
+
+      await ctx.reply(message, { parse_mode: 'Markdown' });
+
     } else if (subcommand.startsWith('prompt:view')) {
       // /admin prompt:view <template_key>
       const templateKey = args[1];
@@ -3180,6 +3285,7 @@ bot.command('admin', async (ctx) => {
         `**🎨 프롬프트 관리:**\n` +
         `• \`/admin prompt:add\` - 새 프롬프트 추가 (LLM 분석)\n` +
         `• \`/admin prompt:list [category]\` - 프롬프트 목록\n` +
+        `• \`/admin prompt:stats <key> [days]\` - 템플릿 상세 통계\n` +
         `• \`/admin prompt:view <key>\` - 프롬프트 상세\n` +
         `• \`/admin prompt:toggle <key>\` - 활성화/비활성화\n\n` +
         `자세한 내용은 \`/help\`를 입력하세요.`,
