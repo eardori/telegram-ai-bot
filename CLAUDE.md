@@ -102,6 +102,15 @@
   - LLM 분석 후 승인/거부 버튼
   - 자동 DB 저장 및 Parameterized 템플릿 생성
 
+- [x] **Phase 5: 프롬프트 사용 통계 및 관리** ⭐ (2025-01-10 완료)
+  - `/admin prompt:stats <key> [days]` - 템플릿 상세 통계
+  - `/admin prompt:toggle <key>` - 활성화/비활성화
+  - `/admin prompt:view <key>` - 프롬프트 상세 조회
+  - `/admin prompt:list [category]` - 프롬프트 목록
+  - SQL: `sql/026_prompt_usage_stats.sql`
+  - Service: `src/services/admin-prompt-manager.ts`
+  - 통계: 사용 횟수, 만족도, 트렌드 분석, 타임라인
+
 **분석 결과:**
 - 38개 프롬프트 전체 분석 완료
 - 6개 Blocker/중요 이슈 발견 및 수정
@@ -116,7 +125,7 @@
 - `docs/PROMPT_MANAGEMENT_SYSTEM_PLAN.md` - 구현 계획
 
 **배포 상태:** ✅ Supabase & Render.com 배포 완료
-**커밋:** b875260
+**최종 커밋:** ccf8138 (2025-01-10)
 
 ---
 
@@ -229,49 +238,7 @@
 
 ### 🔥 다음 작업 (HIGH PRIORITY)
 
-#### 7. 프롬프트 관리 시스템 Phase 2 (1일 예상)
-**목표**: 템플릿 활성화/비활성화 및 사용 통계
-
-**7.1. `/admin prompt:stats <template_key>` - 상세 통계**
-```typescript
-// 기능:
-- 템플릿별 총 사용 횟수
-- 최근 7일/30일 사용 추이
-- 평균 처리 시간
-- 성공률 (에러 없는 편집 비율)
-- 사용자 만족도 (피드백 시스템 연동)
-```
-
-**7.2. `/admin prompt:toggle <template_key>` - 활성화 토글**
-```typescript
-// 기능:
-- 템플릿 활성화/비활성화
-- 비활성화 시 사용자에게 보이지 않음
-- A/B 테스트용 플래그 설정
-```
-
-**데이터베이스:**
-```sql
--- prompt_templates 테이블에 통계 필드 추가
-ALTER TABLE prompt_templates ADD COLUMN usage_count INT DEFAULT 0;
-ALTER TABLE prompt_templates ADD COLUMN last_used_at TIMESTAMP;
-ALTER TABLE prompt_templates ADD COLUMN success_rate DECIMAL(5,2);
-
--- 사용 통계 뷰 생성
-CREATE VIEW prompt_usage_stats AS
-SELECT
-  template_key,
-  COUNT(*) as total_uses,
-  AVG(processing_time) as avg_processing_time,
-  COUNT(CASE WHEN success = true THEN 1 END)::DECIMAL / COUNT(*) * 100 as success_rate
-FROM credit_transactions
-WHERE transaction_type = 'usage'
-GROUP BY template_key;
-```
-
----
-
-#### 8. 그룹 FOMO 전략 개선 (1일 예상)
+#### 7. 그룹 FOMO 전략 개선 (1일 예상) ⭐ 추천
 **목표**: 그룹 무료 체험 → 가입 전환율 최적화
 
 **4.1. 전환율 추적 시스템**
@@ -298,74 +265,30 @@ ALTER TABLE group_free_trials ADD COLUMN IF NOT EXISTS conversion_funnel JSONB;
 // 전환율 추적하여 최적 메시지 선택
 ```
 
-**4.4. 리마인더 시스템**
+**7.4. 리마인더 시스템**
 ```typescript
 // 무료 체험 후 미가입자에게:
 - 3일 후: "아직 5회 무료 크레딧 안 받으셨어요?"
 - 7일 후: "마지막 기회! 내일까지만 5회 무료"
 ```
 
-#### 5. 프롬프트 관리 시스템 (1-2일 예상)
-**목표**: 템플릿 활성화/비활성화 및 사용 통계
-
-**5.1. `/admin prompts` - 프롬프트 목록**
-```typescript
-// 기능:
-- 전체 템플릿 목록 조회 (38개)
-- 템플릿별 사용 횟수 및 인기도
-- 활성화 상태 표시
-- 카테고리별 그룹화
-```
-
-**5.2. `/admin prompt:stats <template_key>` - 상세 통계**
-```typescript
-// 기능:
-- 템플릿별 총 사용 횟수
-- 최근 7일/30일 사용 추이
-- 평균 처리 시간
-- 성공률 (에러 없는 편집 비율)
-- 사용자 만족도 (재사용률)
-```
-
-**5.3. `/admin prompt:toggle <template_key>` - 활성화 토글**
-```typescript
-// 기능:
-- 템플릿 활성화/비활성화
-- 비활성화 시 사용자에게 보이지 않음
-- A/B 테스트용 플래그 설정
-```
-
-**데이터베이스:**
-```sql
--- prompt_templates 테이블에 통계 필드 추가
-ALTER TABLE prompt_templates ADD COLUMN usage_count INT DEFAULT 0;
-ALTER TABLE prompt_templates ADD COLUMN last_used_at TIMESTAMP;
-ALTER TABLE prompt_templates ADD COLUMN success_rate DECIMAL(5,2);
-
--- 사용 통계 뷰 생성
-CREATE VIEW prompt_usage_stats AS
-SELECT
-  template_key,
-  COUNT(*) as total_uses,
-  AVG(processing_time) as avg_processing_time,
-  COUNT(CASE WHEN success = true THEN 1 END)::DECIMAL / COUNT(*) * 100 as success_rate
-FROM credit_transactions
-WHERE transaction_type = 'usage'
-GROUP BY template_key;
-```
+**비즈니스 임팩트:**
+- 전환율 10% → 20% 개선 가능
+- 빠른 매출 증가
+- 추천인 시스템과 시너지
 
 ---
 
 ### 🟢 백로그 작업 (LOW PRIORITY)
 
-#### 6. 고급 분석 시스템 (1-2개월 내)
+#### 8. 고급 분석 시스템 (1-2개월 내)
 - `/admin revenue` - 수익 분석 (패키지/구독별)
 - `/admin users` - 사용자 성장 추이
 - 전환율 분석 (무료→유료, 크레딧→구독)
 - 리텐션 분석 (DAU, WAU, MAU)
 - 코호트 분석 (주차별 리텐션)
 
-#### 7. 세션 기억 기능 개선 (보류)
+#### 9. 세션 기억 기능 개선 (보류)
 **현재 상태**: Phase 5 인메모리 구현 완료, 실제 미작동
 **문제**: webhook.ts에서 SessionManager 미통합
 **우선순위**: 낮음 (다른 기능이 비즈니스 임팩트 더 큼)
@@ -398,13 +321,13 @@ GROUP BY template_key;
    - 문제 해결 가이드
 
 ### 최근 완료된 작업
-- ✅ (2025-01-10) **추천인 시스템 완료** - 바이럴 성장 메커니즘
-- ✅ (2025-01-10) **버튼 UI 개선** - 이모지 제거, 스마트 레이아웃
+- ✅ (2025-01-10) **프롬프트 사용 통계 시스템** - `/admin prompt:stats`, `prompt:toggle` ⭐ NEW
+- ✅ (2025-01-10) **사용자 피드백 시스템** - 만족도 추적 및 대시보드
+- ✅ (2025-01-10) **버튼 네비게이션 대개선** - 일관된 UX, 순환 구조
+- ✅ (2025-01-10) **추천인 시스템 완료** - 바이럴 성장 메커니즘, CAC 99% 절감
+- ✅ (2025-01-10) **프롬프트 관리 시스템** - LLM 분석, 자동 분류
 - ✅ (2025-01-09) 관리자 대시보드 시스템 구현
 - ✅ (2025-01-09) Telegram 수수료 30% 반영 수익성 재계산
-- ✅ (2025-01-09) `/credits` 명령어 추가
-- ✅ (2025-01-09) `/help`에 어드민 전용 섹션 추가
-- ✅ (2025-01-09) `/whoami` 명령어 추가
 
 ---
 
@@ -451,6 +374,18 @@ GROUP BY template_key;
    - 스마트 레이아웃 알고리즘
    - 텍스트 길이 기반 자동 정렬
 
+7. **프롬프트 관리 시스템** ⭐ (2025-01-10 완료)
+   - `/admin prompt:stats <key> [days]` - 템플릿 상세 통계
+   - `/admin prompt:toggle <key>` - 활성화/비활성화
+   - `/admin prompt:view <key>` - 프롬프트 상세 조회
+   - `/admin prompt:list [category]` - 프롬프트 목록
+   - 사용 횟수, 만족도, 트렌드 분석
+
+8. **사용자 피드백 시스템** (2025-01-10 완료)
+   - 결과 화면에 [👍 좋아요 / 👎 별로예요] 버튼
+   - `/admin feedback [days]` - 피드백 통계 대시보드
+   - 템플릿별 만족도 추적 및 개선 알림
+
 ---
 
 ## 🔧 프로젝트 구성
@@ -483,23 +418,27 @@ bot-telegram/
 │   ├── ADMIN_FEATURES_PLAN.md
 │   ├── PROFITABILITY_ANALYSIS.md
 │   ├── MONETIZATION_DESIGN.md
-│   └── REFERRAL_SYSTEM_DEPLOYMENT.md ⭐ NEW!
+│   ├── REFERRAL_SYSTEM_DEPLOYMENT.md
+│   └── PROMPT_FLOW_DIAGRAM.md
 ├── src/
 │   ├── services/
 │   │   ├── admin-dashboard.ts
 │   │   ├── admin-users.ts
 │   │   ├── admin-credits.ts
 │   │   ├── admin-alerts.ts
-│   │   ├── referral-service.ts ⭐ NEW!
+│   │   ├── admin-prompt-manager.ts ⭐ NEW!
+│   │   ├── referral-service.ts
 │   │   ├── credit-manager.ts
 │   │   └── group-fomo-service.ts
 │   └── types/
 │       └── admin.types.ts
 ├── sql/
 │   ├── 020_credit_system.sql
-│   └── 021_referral_system.sql ⭐ NEW!
+│   ├── 021_referral_system.sql
+│   ├── 025_user_feedback_system.sql ⭐ NEW!
+│   └── 026_prompt_usage_stats.sql ⭐ NEW!
 └── netlify/functions/
-    └── webhook.ts (2500+ lines)
+    └── webhook.ts (3400+ lines)
 ```
 
 ---
@@ -523,10 +462,24 @@ bot-telegram/
 - 파라미터 템플릿: 배경 변경, 의상, 표정
 
 ### 관리자 명령어
-- `/admin` - 📊 통합 대시보드
-- `/admin user:search <id>` - 🔍 사용자 검색
-- `/admin credit:grant <id> <amount> <reason>` - 💳 크레딧 지급
+
+**대시보드 & 사용자:**
+- `/admin` - 📊 통합 대시보드 (24h/7d/30d)
+- `/admin user:search <id>` - 🔍 사용자 검색 및 상세 정보
+- `/admin credit:grant <id> <amount> <reason>` - 💳 크레딧 수동 지급
+
+**프롬프트 관리:** ⭐ NEW
+- `/admin prompt:stats <key> [days]` - 📊 템플릿 상세 통계
+- `/admin prompt:toggle <key>` - 🔄 활성화/비활성화
+- `/admin prompt:view <key>` - 📋 프롬프트 상세 조회
+- `/admin prompt:list [category]` - 📝 프롬프트 목록
+- `/admin prompt:add` - ➕ 새 프롬프트 추가 (LLM 분석)
+
+**피드백 & 분석:**
+- `/admin feedback [days]` - 👍 사용자 피드백 통계
 - `/apicost` - 💰 API 비용 통계
+
+**기타:**
 - `/whoami` - 👤 User ID 확인
 - `/health` - 🏥 시스템 상태
 - `/track_start`, `/track_stop`, `/track_status` - 대화 추적
@@ -558,8 +511,10 @@ git push origin main
 ```
 
 ### 최근 배포
+- ✅ 2025-01-10: **프롬프트 사용 통계 시스템** (커밋: ccf8138) ⭐ NEW
+- ✅ 2025-01-10: 사용자 피드백 시스템 (커밋: 783f38a)
+- ✅ 2025-01-10: 버튼 네비게이션 대개선 (커밋: 783f38a)
 - ✅ 2025-01-10: 추천인 시스템 (커밋: 4269d78, 7b7c300)
-- ✅ 2025-01-10: 버튼 UI 개선 (커밋: 2f55d8d)
 - ✅ 2025-01-09: 관리자 대시보드 (커밋: 3cce792)
 
 ---
@@ -571,10 +526,10 @@ git push origin main
 - Phase 5 인메모리 구현 완료, webhook.ts 통합 안 됨
 - **우선순위**: 낮음 (다른 기능 우선)
 
-### 2. 그룹 FOMO 전환율 미측정 (다음 작업)
+### 2. 그룹 FOMO 전환율 미측정 ⭐ (다음 우선 작업)
 - 무료 체험 → 가입 전환율 알 수 없음
 - 메시지 최적화 불가
-- **해결 예정**: Task 4 (그룹 FOMO 개선)
+- **해결 예정**: Task 7 (그룹 FOMO 전략 개선)
 
 ---
 
@@ -623,15 +578,32 @@ docs: 배포 가이드 작성
 ## 🔄 업데이트 로그
 
 ### 2025년 1월 10일 (최신) ⭐
+- 📊 **프롬프트 사용 통계 시스템 완료**
+  - `/admin prompt:stats <key> [days]` - 템플릿 상세 통계
+  - `/admin prompt:toggle <key>` - 활성화/비활성화
+  - 사용 횟수, 만족도, 트렌드 분석
+  - SQL: `sql/026_prompt_usage_stats.sql`
+
+- 👍 **사용자 피드백 시스템 완료**
+  - 결과 화면에 만족도 버튼 추가
+  - `/admin feedback [days]` - 피드백 통계 대시보드
+  - 템플릿별 만족도 추적
+
+- 🧭 **버튼 네비게이션 대개선**
+  - 일관된 버튼 구조 (모든 화면 동일)
+  - 순환 네비게이션 (막다른 골목 제거)
+  - 예측 가능한 UX
+
 - 🎁 **추천인 시스템 완료**
   - 자동 추천 코드 생성 (MULTI12345)
   - Deep Link + 수동 입력 지원
   - 계단식 보너스 (5/10/25/50명)
   - CAC 99% 절감 ($3-5 → $0.04)
-- 🎨 **버튼 UI 개선**
-  - 이모지 제거 (모바일 최적화)
-  - 스마트 레이아웃 알고리즘
-  - 텍스트 길이 기반 자동 정렬
+
+- 🎨 **프롬프트 관리 시스템 완료**
+  - LLM 기반 자동 분석 (Claude Sonnet 4.5)
+  - 파라미터 자동 감지 및 옵션 생성
+  - `/admin prompt:add` - 새 프롬프트 추가
 
 ### 2025년 1월 9일
 - 📊 **관리자 대시보드 구현**
@@ -650,38 +622,33 @@ docs: 배포 가이드 작성
 
 ## 🎯 다음 세션 작업 추천
 
-### 옵션 A: 그룹 FOMO 개선 (빠른 성과)
+### ⭐ 추천: 그룹 FOMO 전략 개선 (Task 7)
 **예상 소요**: 1일
-**비즈니스 임팩트**: 🟡 중간-높음
-- 전환율 추적 시스템
-- `/admin fomo` 대시보드
-- 메시지 A/B 테스트
-- 리마인더 시스템
+**비즈니스 임팩트**: 🔥 높음
 
-**장점:**
-- 기존 그룹 체험 사용자 전환 가능
-- 빠른 매출 증가 (전환율 10% → 20%)
-- 데이터 기반 최적화
+**구현 내용:**
+- 전환율 추적 시스템 (체험 → 버튼 클릭 → 가입 → 첫 충전)
+- `/admin fomo` - 그룹별 전환율 대시보드
+- 메시지 A/B 테스트 (3가지 카피 테스트)
+- 리마인더 시스템 (3일/7일 후 알림)
 
-### 옵션 B: 프롬프트 관리 시스템
-**예상 소요**: 1-2일
-**비즈니스 임팩트**: 🟢 중간
-- `/admin prompts` 목록 및 통계
-- `/admin prompt:stats` 상세 분석
-- `/admin prompt:toggle` 활성화 관리
+**왜 이것을 해야 하나:**
+1. ✅ 프롬프트 관리 시스템 완료 → 다음 우선순위
+2. 💰 추천인 시스템과 시너지 (바이럴 + 전환)
+3. 📈 빠른 매출 증가 (전환율 10% → 20% 목표)
+4. 📊 데이터 기반 지속 최적화 가능
 
-**장점:**
-- 인기 템플릿 파악
-- A/B 테스트로 품질 개선
-- 사용자 만족도 증가
+---
 
-### 추천: **옵션 A (그룹 FOMO 개선)**
-이유:
-1. 추천인 시스템과 시너지 (바이럴 + 전환)
-2. 빠른 매출 증가 (기존 사용자 활용)
-3. 데이터 수집하여 지속 최적화 가능
+### 기타 옵션
+
+**옵션 B: 고급 분석 시스템 (Task 8)**
+- `/admin revenue` - 수익 분석
+- 전환율/리텐션/코호트 분석
+- 예상 소요: 2-3일
+- 비즈니스 임팩트: 🟡 중간
 
 ---
 
 *최종 수정: 2025년 1월 10일*
-*다음 작업: 그룹 FOMO 전략 개선 또는 프롬프트 관리 시스템*
+*다음 작업: 그룹 FOMO 전략 개선 (Task 7) - 전환율 추적 및 최적화*
