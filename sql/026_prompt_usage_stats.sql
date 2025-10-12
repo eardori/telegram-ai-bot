@@ -4,7 +4,7 @@
 -- Purpose: Track template usage, success rate, and performance
 -- Date: 2025-01-10
 -- Author: Claude Code
--- Dependencies: credit_transactions, template_feedback, image_edit_results
+-- Dependencies: credit_transactions, template_feedback
 
 -- =====================================================
 -- 1. Prompt Usage Statistics View
@@ -15,16 +15,9 @@ WITH usage_data AS (
   SELECT
     ct.template_key,
     COUNT(*) as total_uses,
-    COUNT(CASE WHEN ier.success = true THEN 1 END) as successful_edits,
-    COUNT(CASE WHEN ier.success = false THEN 1 END) as failed_edits,
-    AVG(ier.processing_time_ms) as avg_processing_time_ms,
     MAX(ct.created_at) as last_used_at,
     MIN(ct.created_at) as first_used_at
   FROM credit_transactions ct
-  LEFT JOIN image_edit_results ier
-    ON ct.user_id = ier.user_id
-    AND ct.template_key = ier.template_key
-    AND ABS(EXTRACT(EPOCH FROM (ct.created_at - ier.created_at))) < 60 -- Within 60 seconds
   WHERE ct.transaction_type = 'usage'
     AND ct.template_key IS NOT NULL
   GROUP BY ct.template_key
@@ -49,16 +42,6 @@ SELECT
 
   -- Usage statistics
   COALESCE(ud.total_uses, 0) as total_uses,
-  COALESCE(ud.successful_edits, 0) as successful_edits,
-  COALESCE(ud.failed_edits, 0) as failed_edits,
-  CASE
-    WHEN ud.total_uses > 0 THEN
-      ROUND(ud.successful_edits::DECIMAL / ud.total_uses * 100, 2)
-    ELSE NULL
-  END as success_rate,
-
-  -- Performance
-  ROUND(COALESCE(ud.avg_processing_time_ms, 0)) as avg_processing_time_ms,
 
   -- Feedback
   COALESCE(fd.total_feedback, 0) as total_feedback,
@@ -84,15 +67,9 @@ CREATE OR REPLACE VIEW v_recent_prompt_usage AS
 SELECT
   ct.template_key,
   pt.template_name_ko as template_name,
-  COUNT(*) as uses_last_7d,
-  COUNT(CASE WHEN ier.success = true THEN 1 END) as successful_last_7d,
-  ROUND(AVG(ier.processing_time_ms)) as avg_time_last_7d
+  COUNT(*) as uses_last_7d
 FROM credit_transactions ct
 LEFT JOIN prompt_templates pt ON ct.template_key = pt.template_key
-LEFT JOIN image_edit_results ier
-  ON ct.user_id = ier.user_id
-  AND ct.template_key = ier.template_key
-  AND ABS(EXTRACT(EPOCH FROM (ct.created_at - ier.created_at))) < 60
 WHERE
   ct.transaction_type = 'usage'
   AND ct.created_at >= NOW() - INTERVAL '7 days'
@@ -123,7 +100,7 @@ RETURNS TABLE (
   recent_uses BIGINT,
   recent_feedback BIGINT,
 
-  -- Success rate
+  -- Success rate (placeholder - will be NULL)
   success_rate NUMERIC,
   recent_success_rate NUMERIC,
 
@@ -131,7 +108,7 @@ RETURNS TABLE (
   satisfaction_rate NUMERIC,
   recent_satisfaction_rate NUMERIC,
 
-  -- Performance
+  -- Performance (placeholder - will be NULL)
   avg_processing_time_ms NUMERIC,
   recent_avg_processing_time_ms NUMERIC,
 
@@ -145,28 +122,16 @@ BEGIN
   WITH overall_stats AS (
     SELECT
       COUNT(*) as total,
-      COUNT(CASE WHEN ier.success = true THEN 1 END) as success_count,
-      AVG(ier.processing_time_ms) as avg_time,
       MIN(ct.created_at) as first_use,
       MAX(ct.created_at) as last_use
     FROM credit_transactions ct
-    LEFT JOIN image_edit_results ier
-      ON ct.user_id = ier.user_id
-      AND ct.template_key = ier.template_key
-      AND ABS(EXTRACT(EPOCH FROM (ct.created_at - ier.created_at))) < 60
     WHERE ct.template_key = p_template_key
       AND ct.transaction_type = 'usage'
   ),
   recent_stats AS (
     SELECT
-      COUNT(*) as total,
-      COUNT(CASE WHEN ier.success = true THEN 1 END) as success_count,
-      AVG(ier.processing_time_ms) as avg_time
+      COUNT(*) as total
     FROM credit_transactions ct
-    LEFT JOIN image_edit_results ier
-      ON ct.user_id = ier.user_id
-      AND ct.template_key = ier.template_key
-      AND ABS(EXTRACT(EPOCH FROM (ct.created_at - ier.created_at))) < 60
     WHERE ct.template_key = p_template_key
       AND ct.transaction_type = 'usage'
       AND ct.created_at >= NOW() - (p_days || ' days')::INTERVAL
@@ -201,13 +166,9 @@ BEGIN
     rs.total,
     rfs.total,
 
-    -- Success rates
-    CASE WHEN os.total > 0 THEN
-      ROUND(os.success_count::DECIMAL / os.total * 100, 2)
-    ELSE NULL END,
-    CASE WHEN rs.total > 0 THEN
-      ROUND(rs.success_count::DECIMAL / rs.total * 100, 2)
-    ELSE NULL END,
+    -- Success rates (NULL for now - no success tracking in credit_transactions)
+    NULL::NUMERIC,
+    NULL::NUMERIC,
 
     -- Satisfaction rates
     CASE WHEN fs.total > 0 THEN
@@ -217,9 +178,9 @@ BEGIN
       ROUND(rfs.positive::DECIMAL / rfs.total * 100, 2)
     ELSE NULL END,
 
-    -- Performance
-    ROUND(os.avg_time),
-    ROUND(rs.avg_time),
+    -- Performance (NULL for now - no processing time in credit_transactions)
+    NULL::NUMERIC,
+    NULL::NUMERIC,
 
     -- Timestamps
     os.first_use,
