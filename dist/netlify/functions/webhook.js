@@ -3026,13 +3026,23 @@ bot.command('credits', async (ctx) => {
             await ctx.reply('❌ 사용자 정보를 확인할 수 없습니다.');
             return;
         }
+        // Get user language
+        const { data: userData } = await supabase_1.supabase
+            .from('users')
+            .select('language_code')
+            .eq('id', userId)
+            .single();
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx, userData);
         const balanceMessage = await (0, image_edit_credit_wrapper_1.getCreditBalanceMessage)(userId);
         // Add purchase button if credits are low
         const { getCreditBalance } = await Promise.resolve().then(() => __importStar(require('../../src/services/credit-manager')));
         const balance = await getCreditBalance(userId);
         if (balance.total_credits < 5) {
             const keyboard = await (0, purchase_ui_service_1.getCreditPackagesKeyboard)();
-            await ctx.reply(`${balanceMessage}\n\n⚠️ 크레딧이 부족합니다!\n💡 아래에서 충전하세요:`, {
+            const lowCreditsMsg = lang === 'en'
+                ? `${balanceMessage}\n\n⚠️ Low credits!\n💡 Top up below:`
+                : `${balanceMessage}\n\n⚠️ 크레딧이 부족합니다!\n💡 아래에서 충전하세요:`;
+            await ctx.reply(lowCreditsMsg, {
                 parse_mode: 'Markdown',
                 reply_markup: keyboard
             });
@@ -3043,7 +3053,11 @@ bot.command('credits', async (ctx) => {
     }
     catch (error) {
         console.error('❌ Error in credits command:', error);
-        await ctx.reply('❌ 크레딧 정보를 불러오는 중 오류가 발생했습니다.');
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx);
+        const errorMsg = lang === 'en'
+            ? '❌ Error loading credit information.'
+            : '❌ 크레딧 정보를 불러오는 중 오류가 발생했습니다.';
+        await ctx.reply(errorMsg);
     }
 });
 // Referral command - show referral code and statistics
@@ -3056,32 +3070,47 @@ bot.command('referral', async (ctx) => {
             await ctx.reply('❌ 사용자 정보를 확인할 수 없습니다.');
             return;
         }
+        // Get user language
+        const { data: userData } = await supabase_1.supabase
+            .from('users')
+            .select('language_code')
+            .eq('id', userId)
+            .single();
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx, userData);
         // Import referral service
         const { getReferralStats, formatReferralMessage, generateReferralLink } = await Promise.resolve().then(() => __importStar(require('../../src/services/referral-service')));
         // Get referral statistics
         const stats = await getReferralStats(userId);
         if (!stats) {
-            await ctx.reply('❌ 추천 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');
+            const errorMsg = lang === 'en'
+                ? '❌ Unable to load referral information. Please try again later.'
+                : '❌ 추천 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.';
+            await ctx.reply(errorMsg);
             return;
         }
         // Format and send message
         const message = formatReferralMessage(stats, botUsername);
         const referralLink = generateReferralLink(stats.referralCode, botUsername);
         // Check if user already has a referrer (show different button)
-        const { supabase } = await Promise.resolve().then(() => __importStar(require('../../src/utils/supabase')));
-        const { data: hasReferrer } = await supabase
+        const { data: hasReferrer } = await supabase_1.supabase
             .from('referrals')
             .select('id')
             .eq('referred_user_id', userId)
             .single();
-        // Create share button
+        // Create share button with language-specific text
+        const shareText = lang === 'en'
+            ? `🎁 Join Multiful AI bot and get 10 FREE credits!\n\n✨ AI image editing with various styles\n🚀 Start now!`
+            : `🎁 Multiful AI 봇에 가입하고 10 크레딧을 무료로 받으세요!\n\n✨ AI 이미지 편집, 다양한 스타일 변환\n🚀 지금 바로 시작하세요!`;
+        const shareButtonText = lang === 'en' ? 'Share with friends' : '친구에게 공유하기';
+        const creditsButtonText = lang === 'en' ? 'Check my credits' : '내 크레딧 확인';
+        const enterCodeButtonText = lang === 'en' ? 'Enter referral code' : '추천 코드 입력하기';
         const keyboard = new grammy_1.InlineKeyboard()
-            .url('친구에게 공유하기', `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(`🎁 Multiful AI 봇에 가입하고 10 크레딧을 무료로 받으세요!\n\n✨ AI 이미지 편집, 다양한 스타일 변환\n🚀 지금 바로 시작하세요!`)}`)
+            .url(shareButtonText, `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(shareText)}`)
             .row()
-            .text('내 크레딧 확인', 'show_credits');
+            .text(creditsButtonText, 'show_credits');
         // Add "Enter referral code" button only if user doesn't have a referrer yet
         if (!hasReferrer) {
-            keyboard.row().text('추천 코드 입력하기', 'enter_referral_code');
+            keyboard.row().text(enterCodeButtonText, 'enter_referral_code');
         }
         await ctx.reply(message, {
             parse_mode: 'Markdown',
@@ -3090,7 +3119,11 @@ bot.command('referral', async (ctx) => {
     }
     catch (error) {
         console.error('❌ Error in referral command:', error);
-        await ctx.reply('❌ 추천 정보를 불러오는 중 오류가 발생했습니다.');
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx);
+        const errorMsg = lang === 'en'
+            ? '❌ Error loading referral information.'
+            : '❌ 추천 정보를 불러오는 중 오류가 발생했습니다.';
+        await ctx.reply(errorMsg);
     }
 });
 // Enter referral code button handler
