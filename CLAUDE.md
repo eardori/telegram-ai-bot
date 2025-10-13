@@ -4,6 +4,39 @@
 
 ### ✅ 완료된 작업 (COMPLETED)
 
+#### 7. 다국어 지원 (i18n) ⭐ (2025-01-10 완료)
+**목표:** 한국어/영어 지원으로 글로벌 시장 진출 (10배 확장)
+
+**7.1. 기본 시스템 구축** ✅
+- `src/i18n/messages.ts` - 한/영 메시지 50+ 정의
+- `src/utils/i18n-helper.ts` - 언어 감지 및 번역 유틸리티
+- 자동 언어 감지 (DB > Telegram > 기본값)
+- `/language` 명령어 구현 (언어 수동 변경)
+
+**7.2. 명령어 영문화** ✅
+- `/start` - 환영 메시지 (Referral/Group Signup 포함)
+- `/help` - 전체 도움말
+- `/language` - 언어 변경 UI (🇰🇷/🇺🇸 버튼)
+- DB에 언어 설정 저장 (`users.language_code`)
+
+**7.3. 구현 방식** ✅
+- 간단한 JSON 방식 (grammY i18n 대신)
+- TypeScript 타입 안전성 보장
+- 빠른 구현 (3-4시간)
+- 나중에 i18n 플러그인 전환 가능
+
+**비즈니스 임팩트:**
+- 글로벌 시장 진출 (한국 500K → 전세계 300M+ 사용자)
+- Product Hunt 런칭 준비 완료
+- Reddit/HackerNews 접근 가능
+- SEO 검색량 100배 증가 가능
+
+**배포 상태:** ✅ 코드 완료, 테스트 대기
+**문서:** `docs/I18N_IMPLEMENTATION_GUIDE.md`
+**다음 단계:** BotFather 영문 설명 업데이트 → Product Hunt 런칭
+
+---
+
 #### 6. 사용자 피드백 시스템 ⭐ (2025-01-10 완료)
 **목표:** 템플릿별 만족도 추적 및 품질 개선
 

@@ -68,6 +68,8 @@ const image_edit_credit_wrapper_1 = require("../../src/services/image-edit-credi
 const purchase_ui_service_1 = require("../../src/services/purchase-ui-service");
 const telegram_stars_payment_1 = require("../../src/services/telegram-stars-payment");
 const credit_manager_1 = require("../../src/services/credit-manager");
+// Import i18n system
+const i18n_helper_1 = require("../../src/utils/i18n-helper");
 // Environment variables - support both Netlify and Render naming
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
@@ -715,10 +717,54 @@ async function answerQuestion(question, isDobby = false, userId, chatId) {
     }
 }
 // Helper function to get help message content
-async function getHelpMessage() {
+async function getHelpMessage(lang = 'ko') {
     try {
         const versionInfo = await (0, version_manager_1.getVersionInfoForHelp)();
-        return `🤖 **Multiful AI 봇입니다!** ✨
+        const msg = (0, i18n_helper_1.t)('helpMain', lang);
+        const features = (0, i18n_helper_1.t)('helpFeatures', lang);
+        const commands = (0, i18n_helper_1.t)('helpCommands', lang);
+        const support = (0, i18n_helper_1.t)('helpSupport', lang);
+        if (lang === 'en') {
+            return `${msg}
+
+${versionInfo}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+${features}
+
+🎨 **5 Categories, 38+ Editing Styles:**
+• 🎭 3D/Figurine (Pixar, Clay, LEGO, etc.)
+• 📸 Portrait Styling (Profile, ID Photo, etc.)
+• 🎮 Game/Animation (GTA, Anime, etc.)
+• 🛠️ Image Editing (Background/Outfit/Expression)
+• ✨ Creative Transform (Art Gallery, Album Cover, etc.)
+
+✨ **Parameterized Templates:**
+• 🌍 **Background Change** - 6 options (Beach, City, Space, etc.)
+• 👗 **Outfit Change** - 6 options (Suit, Dress, Hanbok, etc.)
+• 😊 **Expression Change** - 5 options (Smile, Serious, Mysterious, etc.)
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+${commands}
+
+💳 **Credits & Payments:**
+• 30 edits ₩3,000 ~ 600 edits ₩50,000
+• Subscription: 50/mo ₩4,500 ~ Unlimited ₩29,900
+
+🎁 **Referral Bonus:**
+• Invite 1 friend: 10 credits each
+• Milestones: 5(+20), 10(+50), 25(+150), 50(+500+VIP)
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+${support}
+
+🎯 **Upload a photo now and experience AI magic!**`;
+        }
+        // Korean (default)
+        return `${msg}
 
 ${versionInfo}
 
@@ -729,6 +775,8 @@ ${versionInfo}
 2. AI가 자동 분석 후 3가지 스타일 추천
 3. 원하는 스타일 선택 또는 전체 카테고리 탐색
 4. 결과 확인 및 피드백 (👍/👎)
+
+${features}
 
 🎨 **5가지 카테고리, 38개 편집 스타일:**
 • 🎭 3D/피규어 변환 (Pixar, Clay, LEGO 등)
@@ -744,8 +792,9 @@ ${versionInfo}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
+${commands}
+
 💳 **크레딧 & 결제:**
-• /credits - 크레딧 잔액 및 충전
 • 무료 체험: 신규 가입 시 5회 무료
 • 크레딧 패키지: 30회 ₩3,000 ~ 600회 ₩50,000
 • 구독 플랜: 월 50회 ₩4,500 ~ 무제한 ₩29,900
@@ -758,46 +807,22 @@ ${versionInfo}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-📋 **기타 명령어:**
-• /help - 이 도움말
-• /support - 고객 지원 및 문의
-• /terms - 이용 약관
-• /version - 버전 및 업데이트 히스토리
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🚀 **사용 예시:**
-1. 사진 업로드
-2. AI 추천: "Pixar 3D", "GTA 스타일", "프로필 사진"
-3. "Pixar 3D" 선택 → 결과 확인
-4. 👍 좋아요 또는 👎 다른 스타일 시도
-
-💡 **팁:**
-• AI 추천을 따르면 최적 결과
-• 불만족 시 👎 클릭하면 다른 스타일 제안
-• 평균 처리 시간: 10-15초
+${support}
 
 🎯 **지금 사진을 업로드하고 AI 마법을 경험하세요!**`;
     }
     catch (error) {
         console.error('Error getting help message:', error);
-        // Fallback to basic message
-        return `🤖 **Multiful AI 봇입니다!** ✨
+        const msg = (0, i18n_helper_1.t)('helpMain', lang);
+        return `${msg}
 
-📸 **AI 사진 편집:**
-1. 사진 업로드
-2. AI 추천 확인
-3. 스타일 선택
-4. 결과 확인!
+📸 **AI Photo Editor**
+1. Upload photo
+2. Check AI recommendations
+3. Select style
+4. See results!
 
-🎨 **38개 스타일 제공**
-• 3D 피규어, 게임 캐릭터, 인물 스타일링 등
-
-💬 **도비 모드:**
-• "도비야, [질문]" - 질문하기
-• "도비야, [설명] 그려줘" - 이미지 생성
-
-🎯 지금 사진을 업로드해보세요!`;
+🎯 Upload a photo now!`;
     }
 }
 /* ============================================================================
@@ -2213,6 +2238,13 @@ bot.command('start', async (ctx) => {
             await ctx.reply('❌ 사용자 정보를 가져올 수 없습니다.');
             return;
         }
+        // Get user from database to determine language
+        const { data: userData } = await supabase_1.supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx, userData);
         // Check for referral code in /start parameter
         const startPayload = ctx.match; // Gets the text after /start
         if (startPayload) {
@@ -2241,58 +2273,83 @@ bot.command('start', async (ctx) => {
                 }
                 else {
                     // Show error but still show help message
-                    await ctx.reply(`⚠️ ${result.message}\n\n아래 도움말을 확인하세요:`);
+                    const errorPrefix = lang === 'en' ? `⚠️ ${result.message}\n\nPlease check the help below:` : `⚠️ ${result.message}\n\n아래 도움말을 확인하세요:`;
+                    await ctx.reply(errorPrefix);
                 }
             }
             else if (startPayload === 'group_signup') {
                 // Group free trial signup: /start group_signup
                 console.log('🎁 Group free trial signup');
-                await ctx.reply(`🎉 **가입을 환영합니다!**\n\n` +
-                    `그룹에서 무료 체험 후 가입하셨네요!\n` +
-                    `가입 보상으로 5 크레딧을 받으셨습니다.\n\n` +
-                    `💡 친구를 초대하면 더 많은 크레딧을 받을 수 있습니다:\n` +
-                    `/referral 명령어로 확인하세요! 🚀`);
+                const groupSignupMsg = lang === 'en'
+                    ? `🎉 **Welcome!**\n\n` +
+                        `You signed up after trying the bot in a group!\n` +
+                        `You received 5 credits as a signup bonus.\n\n` +
+                        `💡 Invite friends to earn more credits:\n` +
+                        `Use /referral command! 🚀`
+                    : `🎉 **가입을 환영합니다!**\n\n` +
+                        `그룹에서 무료 체험 후 가입하셨네요!\n` +
+                        `가입 보상으로 5 크레딧을 받으셨습니다.\n\n` +
+                        `💡 친구를 초대하면 더 많은 크레딧을 받을 수 있습니다:\n` +
+                        `/referral 명령어로 확인하세요! 🚀`;
+                await ctx.reply(groupSignupMsg);
             }
         }
         // Show help message
-        const helpMessage = await getHelpMessage();
+        const helpMessage = await getHelpMessage(lang);
         await ctx.reply(helpMessage);
     }
     catch (error) {
         console.error('❌ Error in start command:', error);
-        const helpMessage = await getHelpMessage();
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx);
+        const helpMessage = await getHelpMessage(lang);
         await ctx.reply(helpMessage);
     }
 });
 // Help command - shows same content as start (with admin section if admin)
 bot.command('help', async (ctx) => {
     console.log('❓ Help command received');
-    // Check if user is admin
-    const ADMIN_USER_IDS = process.env.ADMIN_USER_IDS?.split(',').map(id => parseInt(id)) || [];
-    const isAdmin = ADMIN_USER_IDS.includes(ctx.from?.id || 0);
-    let helpMessage = await getHelpMessage();
-    // Add admin section if user is admin
-    if (isAdmin) {
-        helpMessage += `\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        helpMessage += `🔧 **관리자 전용 명령어:**\n\n`;
-        helpMessage += `**📊 대시보드 & 분석:**\n`;
-        helpMessage += `• /admin - 통합 대시보드 (24h/7d/30d)\n`;
-        helpMessage += `• /admin feedback [days] - 사용자 피드백 통계\n`;
-        helpMessage += `• /apicost - API 사용량 및 비용\n\n`;
-        helpMessage += `**👥 사용자 관리:**\n`;
-        helpMessage += `• /admin user:search <id> - 사용자 검색\n`;
-        helpMessage += `• /admin credit:grant <id> <amount> <reason> - 크레딧 지급\n\n`;
-        helpMessage += `**🎨 프롬프트 관리:**\n`;
-        helpMessage += `• /admin prompt:add - 새 프롬프트 추가 (LLM 분석)\n`;
-        helpMessage += `• /admin prompt:list [category] - 프롬프트 목록\n`;
-        helpMessage += `• /admin prompt:stats <key> [days] - 템플릿 상세 통계\n`;
-        helpMessage += `• /admin prompt:view <key> - 프롬프트 상세\n`;
-        helpMessage += `• /admin prompt:toggle <key> - 활성화/비활성화\n\n`;
-        helpMessage += `**🛠️ 시스템:**\n`;
-        helpMessage += `• /health - 시스템 상태 확인\n`;
-        helpMessage += `• /whoami - User ID 확인\n`;
+    try {
+        const userId = ctx.from?.id || 0;
+        // Get user from database to determine language
+        const { data: userData } = await supabase_1.supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx, userData);
+        // Check if user is admin
+        const ADMIN_USER_IDS = process.env.ADMIN_USER_IDS?.split(',').map(id => parseInt(id)) || [];
+        const isAdmin = ADMIN_USER_IDS.includes(userId);
+        let helpMessage = await getHelpMessage(lang);
+        // Add admin section if user is admin (always in Korean for now)
+        if (isAdmin) {
+            helpMessage += `\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            helpMessage += `🔧 **관리자 전용 명령어:**\n\n`;
+            helpMessage += `**📊 대시보드 & 분석:**\n`;
+            helpMessage += `• /admin - 통합 대시보드 (24h/7d/30d)\n`;
+            helpMessage += `• /admin feedback [days] - 사용자 피드백 통계\n`;
+            helpMessage += `• /apicost - API 사용량 및 비용\n\n`;
+            helpMessage += `**👥 사용자 관리:**\n`;
+            helpMessage += `• /admin user:search <id> - 사용자 검색\n`;
+            helpMessage += `• /admin credit:grant <id> <amount> <reason> - 크레딧 지급\n\n`;
+            helpMessage += `**🎨 프롬프트 관리:**\n`;
+            helpMessage += `• /admin prompt:add - 새 프롬프트 추가 (LLM 분석)\n`;
+            helpMessage += `• /admin prompt:list [category] - 프롬프트 목록\n`;
+            helpMessage += `• /admin prompt:stats <key> [days] - 템플릿 상세 통계\n`;
+            helpMessage += `• /admin prompt:view <key> - 프롬프트 상세\n`;
+            helpMessage += `• /admin prompt:toggle <key> - 활성화/비활성화\n\n`;
+            helpMessage += `**🛠️ 시스템:**\n`;
+            helpMessage += `• /health - 시스템 상태 확인\n`;
+            helpMessage += `• /whoami - User ID 확인\n`;
+        }
+        await ctx.reply(helpMessage);
     }
-    await ctx.reply(helpMessage);
+    catch (error) {
+        console.error('❌ Error in help command:', error);
+        const lang = (0, i18n_helper_1.getUserLanguage)(ctx);
+        const helpMessage = await getHelpMessage(lang);
+        await ctx.reply(helpMessage);
+    }
 });
 // Whoami command - shows user ID for admin setup
 bot.command('whoami', async (ctx) => {
@@ -2305,6 +2362,60 @@ bot.command('whoami', async (ctx) => {
         `• **이름**: ${firstName}\n\n` +
         `💡 **ADMIN_USER_IDS 환경변수에 추가하세요:**\n` +
         `\`ADMIN_USER_IDS=${userId}\``, { parse_mode: 'Markdown' });
+});
+// Language command - allows users to change their language preference
+bot.command('language', async (ctx) => {
+    console.log('🌍 Language command received');
+    try {
+        const userId = ctx.from?.id;
+        if (!userId)
+            return;
+        // Get current language
+        const { data: userData } = await supabase_1.supabase
+            .from('users')
+            .select('language_code')
+            .eq('id', userId)
+            .single();
+        const currentLang = (0, i18n_helper_1.getUserLanguage)(ctx, userData);
+        const msg = (0, i18n_helper_1.t)('selectLanguage', currentLang);
+        // Create language selection keyboard
+        const keyboard = new grammy_1.InlineKeyboard()
+            .text('🇰🇷 한국어', 'lang:ko')
+            .text('🇺🇸 English', 'lang:en');
+        await ctx.reply(msg, { reply_markup: keyboard });
+    }
+    catch (error) {
+        console.error('❌ Error in language command:', error);
+        await ctx.reply('❌ Error changing language. Please try again.');
+    }
+});
+// Handle language selection callback
+bot.callbackQuery(/^lang:(ko|en)$/, async (ctx) => {
+    try {
+        const userId = ctx.from?.id;
+        if (!userId)
+            return;
+        const selectedLang = ctx.match[1];
+        // Update language in database
+        const { error } = await supabase_1.supabase
+            .from('users')
+            .update({ language_code: selectedLang })
+            .eq('id', userId);
+        if (error) {
+            console.error('❌ Error updating language:', error);
+            await ctx.answerCallbackQuery({ text: '❌ Error updating language' });
+            return;
+        }
+        const langName = (0, i18n_helper_1.getLanguageDisplayName)(selectedLang);
+        const successMsg = (0, i18n_helper_1.t)('languageChanged', selectedLang)(langName);
+        await ctx.answerCallbackQuery({ text: successMsg });
+        await ctx.editMessageText(successMsg);
+        console.log(`✅ Language changed to ${selectedLang} for user ${userId}`);
+    }
+    catch (error) {
+        console.error('❌ Error handling language callback:', error);
+        await ctx.answerCallbackQuery({ text: '❌ Error' });
+    }
 });
 // =============================================================================
 // ADMIN COMMANDS - Dashboard, User Management, Credit Grant
