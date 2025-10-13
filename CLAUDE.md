@@ -313,12 +313,19 @@ ALTER TABLE group_free_trials ADD COLUMN IF NOT EXISTS conversion_funnel JSONB;
    - 크레딧 시스템
    - 구독 플랜
 
-4. **`docs/REFERRAL_SYSTEM_DEPLOYMENT.md`** ⭐ NEW!
+4. **`docs/REFERRAL_SYSTEM_DEPLOYMENT.md`**
    - Supabase SQL 실행 방법
    - 테스트 시나리오 3가지
    - 사용자 가이드
    - 관리자 모니터링 쿼리
    - 문제 해결 가이드
+
+5. **`docs/RENDER_NSFW_API_ISSUE.md`** ⭐ NEW!
+   - Render.com NSFW API 차단 이슈
+   - 4가지 해결 방안 비교
+   - 단계별 실행 계획
+   - 비용 및 시간 분석
+   - 상태 업데이트 로그
 
 ### 최근 완료된 작업
 - ✅ (2025-01-10) **프롬프트 사용 통계 시스템** - `/admin prompt:stats`, `prompt:toggle` ⭐ NEW
@@ -490,8 +497,15 @@ bot-telegram/
 ## 🚀 배포 정보
 
 ### 플랫폼
-- **프로덕션**: Render.com (자동 배포)
-- **데이터베이스**: Supabase
+- **프로덕션**: Render.com (Web Service, 자동 배포)
+- **데이터베이스**: Supabase (PostgreSQL)
+- **이전 플랫폼**: Netlify Functions (10초 timeout 문제로 마이그레이션)
+
+**Render.com 선택 이유:**
+- ✅ 100분 timeout (이미지 처리 30-60초 필요)
+- ✅ 무료 티어 750시간/월
+- ✅ Always-on 서버 (cold start 없음)
+- ⚠️ NSFW API 차단 이슈 있음 (현재 해결 중)
 
 ### 배포 프로세스
 ```bash
@@ -521,12 +535,23 @@ git push origin main
 
 ## ⚠️ 알려진 이슈
 
-### 1. 세션 기억 기능 미작동 (보류)
+### 1. Render.com NSFW API 차단 🚨 (현재 블로커)
+- **문제**: Render.com 서버에서 특정 NSFW 관련 API 호출 차단
+- **영향**: 일부 이미지 편집 기능 실패
+- **임시 해결책**: 해당 API 우회 또는 대체 API 사용
+- **장기 해결책**:
+  - Option A: Render 지원팀에 문의 (화이트리스트 요청)
+  - Option B: 다른 호스팅 플랫폼 고려 (Fly.io, Railway)
+  - Option C: NSFW 탐지 API를 프록시 서버 경유
+- **우선순위**: 🔴 높음 (기능 장애)
+- **현재 상태**: Render 지원팀 회신 대기 중
+
+### 2. 세션 기억 기능 미작동 (보류)
 - 사용자가 연속으로 질문해도 컨텍스트 미유지
 - Phase 5 인메모리 구현 완료, webhook.ts 통합 안 됨
 - **우선순위**: 낮음 (다른 기능 우선)
 
-### 2. 그룹 FOMO 전환율 미측정 ⭐ (다음 우선 작업)
+### 3. 그룹 FOMO 전환율 미측정 ⭐ (다음 우선 작업)
 - 무료 체험 → 가입 전환율 알 수 없음
 - 메시지 최적화 불가
 - **해결 예정**: Task 7 (그룹 FOMO 전략 개선)
