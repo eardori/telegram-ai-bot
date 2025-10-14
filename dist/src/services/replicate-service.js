@@ -23,9 +23,24 @@ class ReplicateService {
         else {
             this.client = new replicate_1.default({
                 auth: apiToken,
+                userAgent: 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)',
+                // Custom fetch with additional headers to avoid 403
+                fetch: (input, init) => {
+                    const headers = new Headers(init?.headers);
+                    // Add headers that may help bypass Cloudflare blocks
+                    if (!headers.has('User-Agent')) {
+                        headers.set('User-Agent', 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)');
+                    }
+                    headers.set('Accept', 'application/json');
+                    headers.set('X-Requested-With', 'XMLHttpRequest');
+                    return fetch(input, {
+                        ...init,
+                        headers,
+                    });
+                },
             });
             this.isEnabled = true;
-            console.log('✅ Replicate service initialized');
+            console.log('✅ Replicate service initialized with custom headers');
         }
     }
     /**
@@ -59,7 +74,13 @@ class ReplicateService {
             return output;
         }
         catch (error) {
-            console.error('❌ Replicate image generation error:', error);
+            console.error('❌ Replicate image generation error:', {
+                message: error.message,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                stack: error.stack,
+            });
             throw error;
         }
     }
@@ -84,7 +105,12 @@ class ReplicateService {
             return output;
         }
         catch (error) {
-            console.error('❌ Replicate video generation error:', error);
+            console.error('❌ Replicate video generation error:', {
+                message: error.message,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+            });
             throw error;
         }
     }
@@ -109,7 +135,12 @@ class ReplicateService {
             return output;
         }
         catch (error) {
-            console.error('❌ Replicate image-to-video error:', error);
+            console.error('❌ Replicate image-to-video error:', {
+                message: error.message,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+            });
             throw error;
         }
     }
