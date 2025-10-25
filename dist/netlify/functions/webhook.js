@@ -909,11 +909,12 @@ bot.on('message:photo', async (ctx) => {
         }
         // Add category buttons (without emojis, smart layout)
         const categoryButtons = [
-            { text: '3D/피규어', data: `cat:3d_figurine:${fileKey}` },
-            { text: '인물 스타일', data: `cat:portrait_styling:${fileKey}` },
-            { text: '게임/애니', data: `cat:game_animation:${fileKey}` },
+            { text: '3D/피규어', data: `cat:3d_figure:${fileKey}` },
+            { text: '인물 스타일', data: `cat:portrait:${fileKey}` },
+            { text: '게임/애니', data: `cat:game_anime:${fileKey}` },
             { text: '이미지 편집', data: `cat:image_editing:${fileKey}` },
-            { text: '창의적 변환', data: `cat:creative_transform:${fileKey}` }
+            { text: '창의적 변환', data: `cat:creative_transformations:${fileKey}` },
+            { text: '🔞 성인 전용', data: `cat:nsfw:${fileKey}` }
         ];
         addButtonsWithSmartLayout(keyboard, categoryButtons);
         keyboard.row();
@@ -1889,11 +1890,12 @@ bot.callbackQuery(/^back_to_main:(.+):(.+)$/, async (ctx) => {
         const keyboard = new grammy_1.InlineKeyboard();
         const fileKey = `${chatId}:${messageId}`;
         // Category buttons (한 줄에 1개씩)
-        keyboard.text('🎭 3D/피규어', `cat:3d_figurine:${fileKey}`).row();
-        keyboard.text('👤 인물 스타일', `cat:portrait_styling:${fileKey}`).row();
-        keyboard.text('🎮 게임/애니메이션', `cat:game_animation:${fileKey}`).row();
+        keyboard.text('🎭 3D/피규어', `cat:3d_figure:${fileKey}`).row();
+        keyboard.text('👤 인물 스타일', `cat:portrait:${fileKey}`).row();
+        keyboard.text('🎮 게임/애니메이션', `cat:game_anime:${fileKey}`).row();
         keyboard.text('✂️ 이미지 편집', `cat:image_editing:${fileKey}`).row();
-        keyboard.text('🎨 창의적 변환', `cat:creative_transform:${fileKey}`).row();
+        keyboard.text('🎨 창의적 변환', `cat:creative_transformations:${fileKey}`).row();
+        keyboard.text('🔞 성인 전용', `cat:nsfw:${fileKey}`).row();
         // All templates button
         keyboard.row();
         keyboard.text('📋 전체 스타일 보기', `show_all:${fileKey}`);
@@ -1914,11 +1916,12 @@ bot.callbackQuery(/^back_to_categories:(.+):(.+)$/, async (ctx) => {
         const keyboard = new grammy_1.InlineKeyboard();
         const fileKey = `${chatId}:${messageId}`;
         // Category buttons (no emojis for consistent UX)
-        keyboard.text('3D/피규어', `cat:3d_figurine:${fileKey}`).row();
-        keyboard.text('인물 스타일', `cat:portrait_styling:${fileKey}`).row();
-        keyboard.text('게임/애니메이션', `cat:game_animation:${fileKey}`).row();
+        keyboard.text('3D/피규어', `cat:3d_figure:${fileKey}`).row();
+        keyboard.text('인물 스타일', `cat:portrait:${fileKey}`).row();
+        keyboard.text('게임/애니메이션', `cat:game_anime:${fileKey}`).row();
         keyboard.text('이미지 편집', `cat:image_editing:${fileKey}`).row();
-        keyboard.text('창의적 변환', `cat:creative_transform:${fileKey}`).row();
+        keyboard.text('창의적 변환', `cat:creative_transformations:${fileKey}`).row();
+        keyboard.text('🔞 성인 전용', `cat:nsfw:${fileKey}`).row();
         // All templates button
         keyboard.row();
         keyboard.text('📋 전체 스타일 보기', `show_all:${fileKey}`);
@@ -3869,12 +3872,13 @@ bot.on('message:text', async (ctx) => {
                 }
                 // Add category buttons (no emoji)
                 keyboard.row();
-                keyboard.text('3D/피규어', `cat:3d_figurine:${fileKey}`)
-                    .text('인물 스타일', `cat:portrait_styling:${fileKey}`)
-                    .text('게임/애니', `cat:game_animation:${fileKey}`);
+                keyboard.text('3D/피규어', `cat:3d_figure:${fileKey}`)
+                    .text('인물 스타일', `cat:portrait:${fileKey}`)
+                    .text('게임/애니', `cat:game_anime:${fileKey}`);
                 keyboard.row();
                 keyboard.text('이미지 편집', `cat:image_editing:${fileKey}`)
-                    .text('창의적 변환', `cat:creative_transform:${fileKey}`);
+                    .text('창의적 변환', `cat:creative_transformations:${fileKey}`)
+                    .text('🔞 성인 전용', `cat:nsfw:${fileKey}`);
                 // Add "View All" button
                 keyboard.row();
                 keyboard.text('📋 전체 스타일 보기', `show_all:${fileKey}`);
