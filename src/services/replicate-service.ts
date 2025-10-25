@@ -197,9 +197,16 @@ class ReplicateService {
       console.log(`📐 Target size: ${targetWidth}x${targetHeight}`);
 
       const processedBuffer = await sharp(imageBuffer)
-        .resize(targetWidth, targetHeight, { fit: 'cover' })
+        .resize(targetWidth, targetHeight, {
+          fit: 'fill',  // Force exact dimensions without cropping
+          kernel: 'lanczos3'  // High quality resampling
+        })
         .jpeg({ quality: 95 })
         .toBuffer();
+
+      // Verify processed image dimensions
+      const processedMetadata = await sharp(processedBuffer).metadata();
+      console.log(`✅ Processed size: ${processedMetadata.width}x${processedMetadata.height}`);
 
       // Convert to base64 data URI
       const base64Image = `data:image/jpeg;base64,${processedBuffer.toString('base64')}`;
