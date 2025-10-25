@@ -41,7 +41,7 @@ async function getTemplateWithParameters(templateKey) {
         // Get template
         const { data: template, error: templateError } = await supabase_1.supabase
             .from('prompt_templates')
-            .select('template_key, template_name_ko, template_type, base_prompt')
+            .select('template_key, template_name_ko, template_type, category, base_prompt')
             .eq('template_key', templateKey)
             .eq('is_active', true)
             .single();

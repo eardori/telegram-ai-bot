@@ -1024,6 +1024,87 @@ function generateShortCallbackId(data) {
 function resolveCallbackData(shortId) {
     return callbackDataCache.get(shortId);
 }
+// ========== NSFW CONSENT HANDLERS ==========
+// Handle NSFW consent "Yes" button
+bot.callbackQuery(/^nsfw_consent_yes:(.+):(.+)$/, async (ctx) => {
+    try {
+        const chatId = parseInt(ctx.match[1]);
+        const messageId = parseInt(ctx.match[2]);
+        const fileKey = `${chatId}:${messageId}`;
+        const userId = ctx.from?.id;
+        if (!userId) {
+            await ctx.answerCallbackQuery('❌ 사용자 정보를 확인할 수 없습니다.');
+            return;
+        }
+        console.log(`✅ User ${userId} gave NSFW consent`);
+        // Grant consent
+        const { nsfwSafetyService } = await Promise.resolve().then(() => __importStar(require('../../src/services/nsfw-safety')));
+        const success = await nsfwSafetyService.grantConsent(userId, true);
+        if (!success) {
+            await ctx.answerCallbackQuery('❌ 동의 처리 중 오류가 발생했습니다.');
+            await ctx.reply('❌ 동의 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+            return;
+        }
+        await ctx.answerCallbackQuery('✅ 동의 완료');
+        // Show success message and redirect back to NSFW category
+        await ctx.reply(`✅ **성인 전용 기능 사용 동의 완료**\n\n` +
+            `이제 성인 전용 스타일을 사용할 수 있습니다.\n\n` +
+            `📋 아래 버튼을 눌러 NSFW 스타일 목록을 확인하세요.`);
+        // Redirect back to NSFW category selection
+        const keyboard = new grammy_1.InlineKeyboard();
+        // Fetch NSFW templates
+        const { data: nsfwTemplates, error } = await supabase_1.supabase
+            .from('prompt_templates')
+            .select('*')
+            .eq('category', 'nsfw')
+            .eq('is_active', true)
+            .order('priority', { ascending: false });
+        if (error || !nsfwTemplates || nsfwTemplates.length === 0) {
+            await ctx.reply('❌ NSFW 템플릿을 가져오는 중 오류가 발생했습니다.');
+            return;
+        }
+        // Add template buttons (1 per row)
+        nsfwTemplates.forEach(template => {
+            keyboard.text(template.template_name_ko, `t:${template.template_key}:${fileKey}`).row();
+        });
+        // Back button
+        keyboard.row();
+        keyboard.text('🔙 뒤로', `back_to_main:${fileKey}`);
+        await ctx.reply(`🎨 **nsfw 스타일** (${nsfwTemplates.length}개)\n\n원하는 스타일을 선택하세요:`, { reply_markup: keyboard });
+    }
+    catch (error) {
+        console.error('❌ Error in NSFW consent yes handler:', error);
+        await ctx.answerCallbackQuery('❌ 오류가 발생했습니다');
+    }
+});
+// Handle NSFW consent "No" button
+bot.callbackQuery(/^nsfw_consent_no:(.+):(.+)$/, async (ctx) => {
+    try {
+        const chatId = parseInt(ctx.match[1]);
+        const messageId = parseInt(ctx.match[2]);
+        const fileKey = `${chatId}:${messageId}`;
+        console.log(`❌ User ${ctx.from?.id} declined NSFW consent`);
+        await ctx.answerCallbackQuery('동의하지 않으셨습니다');
+        // Show message and redirect back to main categories
+        await ctx.reply(`❌ **성인 전용 기능 사용 동의 거부**\n\n` +
+            `성인 전용 스타일을 사용하려면 동의가 필요합니다.\n\n` +
+            `📋 다른 카테고리에서 스타일을 선택해주세요.`);
+        // Redirect to category selection
+        const keyboard = new grammy_1.InlineKeyboard();
+        keyboard.text('3D/피규어', `cat:3d_figure:${fileKey}`).row();
+        keyboard.text('인물 스타일', `cat:portrait:${fileKey}`).row();
+        keyboard.text('게임/애니메이션', `cat:game_anime:${fileKey}`).row();
+        keyboard.text('이미지 편집', `cat:image_editing:${fileKey}`).row();
+        keyboard.text('창의적 변환', `cat:creative_transformations:${fileKey}`).row();
+        keyboard.row();
+        keyboard.text('📋 전체 스타일 보기', `t:all:${fileKey}`);
+        await ctx.reply(`📂 **카테고리 선택**\n\n원하는 카테고리를 선택하세요:`, { reply_markup: keyboard });
+    }
+    catch (error) {
+        console.error('❌ Error in NSFW consent no handler:', error);
+        await ctx.answerCallbackQuery('❌ 오류가 발생했습니다');
+    }
+});
 // AI Suggestion selection callback handler (NEW!)
 bot.callbackQuery(/^ai:(\d+):(.+):(.+)$/, async (ctx) => {
     try {
@@ -1204,6 +1285,51 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         if (error || !template) {
             await ctx.reply('❌ 선택한 템플릿을 찾을 수 없습니다.');
             return;
+        }
+        // ========== NSFW CONSENT CHECK ==========
+        if (template.category === 'nsfw') {
+            console.log(`🔞 NSFW template selected: ${templateKey}`);
+            const { nsfwSafetyService } = await Promise.resolve().then(() => __importStar(require('../../src/services/nsfw-safety')));
+            const userId = ctx.from?.id;
+            if (!userId) {
+                await ctx.reply('❌ 사용자 정보를 확인할 수 없습니다.');
+                return;
+            }
+            // Check if user can use NSFW features
+            const accessCheck = await nsfwSafetyService.canUseNSFW(userId);
+            // If consent not given, show consent dialog
+            if (!accessCheck.allowed && accessCheck.reason === 'no_consent') {
+                console.log(`⚠️ User ${userId} has not given NSFW consent. Showing consent dialog...`);
+                const consentMessage = nsfwSafetyService.getConsentMessageKo();
+                const consentKeyboard = new grammy_1.InlineKeyboard()
+                    .text('✅ 예, 동의합니다 (만 19세 이상)', `nsfw_consent_yes:${fileKey}`)
+                    .row()
+                    .text('❌ 아니오', `nsfw_consent_no:${fileKey}`);
+                await ctx.reply(consentMessage, { reply_markup: consentKeyboard });
+                return;
+            }
+            // If age not verified (shouldn't happen separately, but just in case)
+            if (!accessCheck.allowed && accessCheck.reason === 'age_not_verified') {
+                await ctx.reply('⚠️ 연령 인증이 필요합니다. 다시 시도해주세요.');
+                return;
+            }
+            // If daily limit exceeded
+            if (!accessCheck.allowed && accessCheck.reason === 'daily_limit_exceeded' && accessCheck.limit_check) {
+                const limitMessage = nsfwSafetyService.getLimitExceededMessageKo(accessCheck.limit_check);
+                await ctx.reply(limitMessage);
+                return;
+            }
+            // If NSFW disabled
+            if (!accessCheck.allowed && accessCheck.reason === 'nsfw_disabled') {
+                await ctx.reply('❌ NSFW 기능이 비활성화되었습니다. 관리자에게 문의하세요.');
+                return;
+            }
+            // If allowed but other reason
+            if (!accessCheck.allowed) {
+                await ctx.reply(`❌ NSFW 기능을 사용할 수 없습니다. (사유: ${accessCheck.reason})`);
+                return;
+            }
+            console.log(`✅ NSFW access granted for user ${userId}`);
         }
         // ✨ CHECK IF PARAMETERIZED TEMPLATE
         const { isParameterizedTemplate, getTemplateWithParameters } = await Promise.resolve().then(() => __importStar(require('../../src/services/parameterized-template-service')));
@@ -1499,7 +1625,7 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
             imageUrl,
             templatePrompt: finalPrompt,
             templateName: `${templateWithParams.template_name_ko} - ${option.option_name_ko}`,
-            category: templateWithParams.template_type,
+            category: templateWithParams.category,
             userId: ctx.from?.id,
             chatId: ctx.chat?.id,
             templateKey: templateKey
