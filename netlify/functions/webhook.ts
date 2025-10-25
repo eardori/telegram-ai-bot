@@ -1600,12 +1600,10 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         return;
       }
 
-      // If daily limit exceeded
-      if (!accessCheck.allowed && accessCheck.reason === 'daily_limit_exceeded' && accessCheck.limit_check) {
-        const limitMessage = nsfwSafetyService.getLimitExceededMessageKo(accessCheck.limit_check);
-        await ctx.reply(limitMessage);
-        return;
-      }
+      // ========== DAILY LIMIT CHECK REMOVED ==========
+      // Daily limit check removed - NSFW uses regular credit system
+      // Credits are already checked via checkCreditsBeforeEdit() below
+      // ===============================================
 
       // If NSFW disabled
       if (!accessCheck.allowed && accessCheck.reason === 'nsfw_disabled') {
@@ -1613,7 +1611,7 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
         return;
       }
 
-      // If allowed but other reason
+      // If allowed but other reason (should not happen now, but keep for safety)
       if (!accessCheck.allowed) {
         await ctx.reply(`❌ NSFW 기능을 사용할 수 없습니다. (사유: ${accessCheck.reason})`);
         return;

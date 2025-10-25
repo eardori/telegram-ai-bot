@@ -119,6 +119,9 @@ class NSFWSafetyService {
 
   /**
    * Check if user can use NSFW features (full verification)
+   *
+   * NOTE: Daily limit check removed - NSFW uses regular credit system
+   * Credits are already limited by credit_manager, so no need for additional NSFW-specific limits
    */
   async canUseNSFW(userId: number): Promise<{
     allowed: boolean;
@@ -153,23 +156,21 @@ class NSFWSafetyService {
       };
     }
 
-    // 2. Check daily limit
-    const limitCheck = await this.checkDailyLimit(userId);
-
-    if (!limitCheck.can_use) {
-      return {
-        allowed: false,
-        reason: 'daily_limit_exceeded',
-        consent_status: consentStatus,
-        limit_check: limitCheck,
-      };
-    }
+    // ========== DAILY LIMIT CHECK REMOVED ==========
+    // Reason: NSFW editing uses regular credit system (checkCreditsBeforeEdit)
+    // - Free users: 5 credits total (already limited)
+    // - Paid users: 30-600 credits (5-per-day limit was too restrictive)
+    // - VIP users: Unlimited credits (no additional limit needed)
+    //
+    // Credits are deducted in webhook.ts via checkCreditsBeforeEdit()
+    // No need for duplicate NSFW-specific daily limit
+    // ===============================================
 
     // All checks passed
     return {
       allowed: true,
       consent_status: consentStatus,
-      limit_check: limitCheck,
+      // limit_check removed - not needed anymore
     };
   }
 

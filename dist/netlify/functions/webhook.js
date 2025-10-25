@@ -1313,18 +1313,16 @@ bot.callbackQuery(/^t:([^:]+):(.+):(.+)$/, async (ctx) => {
                 await ctx.reply('⚠️ 연령 인증이 필요합니다. 다시 시도해주세요.');
                 return;
             }
-            // If daily limit exceeded
-            if (!accessCheck.allowed && accessCheck.reason === 'daily_limit_exceeded' && accessCheck.limit_check) {
-                const limitMessage = nsfwSafetyService.getLimitExceededMessageKo(accessCheck.limit_check);
-                await ctx.reply(limitMessage);
-                return;
-            }
+            // ========== DAILY LIMIT CHECK REMOVED ==========
+            // Daily limit check removed - NSFW uses regular credit system
+            // Credits are already checked via checkCreditsBeforeEdit() below
+            // ===============================================
             // If NSFW disabled
             if (!accessCheck.allowed && accessCheck.reason === 'nsfw_disabled') {
                 await ctx.reply('❌ NSFW 기능이 비활성화되었습니다. 관리자에게 문의하세요.');
                 return;
             }
-            // If allowed but other reason
+            // If allowed but other reason (should not happen now, but keep for safety)
             if (!accessCheck.allowed) {
                 await ctx.reply(`❌ NSFW 기능을 사용할 수 없습니다. (사유: ${accessCheck.reason})`);
                 return;
