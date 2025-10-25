@@ -152,7 +152,7 @@ export async function editImageWithTemplate(request: ImageEditRequest): Promise<
     // Route to appropriate AI model based on category
     if (isNSFW) {
       // ============================================
-      // NSFW: Use Replicate API (Flux.1Dev Uncensored)
+      // NSFW: Use Replicate API (Flux img2img)
       // ============================================
       console.log('🔄 Routing to Replicate API for NSFW content...');
 
@@ -161,9 +161,7 @@ export async function editImageWithTemplate(request: ImageEditRequest): Promise<
         throw new Error('Replicate API is not configured. NSFW features are unavailable.');
       }
 
-      // For NSFW, we use text-to-image (not image editing)
-      // Replicate's Flux model doesn't support image-to-image well
-      // So we describe the input image in the prompt
+      // Build NSFW prompt with quality requirements
       const nsfwPrompt = `${request.templatePrompt}
 
 QUALITY REQUIREMENTS:
@@ -172,6 +170,7 @@ QUALITY REQUIREMENTS:
 - Photorealistic rendering
 - Sharp details and clear focus
 - Proper lighting and composition
+- Maintain facial features and identity of the person in the original image
 
 STYLE:
 - Professional photography aesthetic
@@ -180,13 +179,16 @@ STYLE:
 
       console.log('📝 NSFW Prompt:', nsfwPrompt.substring(0, 200) + '...');
 
-      // Generate NSFW image
-      const resultUrls = await replicateService.generateNSFWImage(nsfwPrompt, {
-        width: 1024,
-        height: 1024,
-        steps: 25,
-        cfg_scale: 7
-      });
+      // Generate NSFW image using Image-to-Image (preserves original person)
+      const resultUrls = await replicateService.generateNSFWImageFromImage(
+        request.imageUrl,
+        nsfwPrompt,
+        {
+          denoising: 0.75,  // Balance between transformation and preservation
+          steps: 25,
+          seed: -1
+        }
+      );
 
       if (!resultUrls || resultUrls.length === 0) {
         throw new Error('Replicate API returned no results');

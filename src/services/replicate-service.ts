@@ -111,8 +111,9 @@ class ReplicateService {
   }
 
   /**
-   * Generate NSFW image from text prompt
+   * Generate NSFW image from text prompt (Text-to-Image)
    * Uses Flux.1Dev Uncensored model (MSFLUX NSFW v3)
+   * WARNING: This is text-to-image only, does not preserve original person
    */
   async generateNSFWImage(
     prompt: string,
@@ -144,6 +145,56 @@ class ReplicateService {
       return output as string[];
     } catch (error: any) {
       console.error('❌ Replicate image generation error:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Generate NSFW image from input image (Image-to-Image)
+   * Uses Flux img2img model - preserves original person
+   * @param imageUrl - URL of the original image
+   * @param prompt - Transformation prompt
+   * @param denoising - Strength of transformation (0.5-1.0, default 0.75)
+   */
+  async generateNSFWImageFromImage(
+    imageUrl: string,
+    prompt: string,
+    options: { denoising?: number; steps?: number; seed?: number } = {}
+  ): Promise<string[]> {
+    if (!this.isEnabled) {
+      throw new Error('Replicate service is not configured. Please add REPLICATE_API_TOKEN to environment variables.');
+    }
+
+    console.log(`🎨 Generating NSFW image-to-image with Flux: "${prompt}"`);
+    console.log(`📸 Source image: ${imageUrl}`);
+    console.log(`🔧 Denoising: ${options.denoising || 0.75}`);
+
+    try {
+      const output = await this.client.run(
+        "bxclib2/flux_img2img:0e918fe971eaa64f7c6d56f0a26d2b3c3dad8cd74f9ae23cc47e4b0e08e7b77e",
+        {
+          input: {
+            image: imageUrl,
+            positive_prompt: prompt,
+            denoising: options.denoising || 0.75,  // Lower = more similar to original
+            steps: options.steps || 20,
+            seed: options.seed || -1,
+            scheduler: "simple",
+            sampler_name: "euler"
+          }
+        }
+      );
+
+      console.log('✅ NSFW image-to-image generated successfully');
+      return output as string[];
+    } catch (error: any) {
+      console.error('❌ Replicate image-to-image generation error:', {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText,
