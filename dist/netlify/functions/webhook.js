@@ -57,6 +57,7 @@ const tracking_types_1 = require("../../src/types/tracking.types");
 const version_manager_1 = require("../../src/utils/version-manager");
 // Import image editing handlers
 const image_edit_handler_1 = require("../../src/handlers/image-edit-handler");
+const nsfw_consent_handler_1 = require("../../src/handlers/nsfw-consent-handler");
 const photo_upload_handler_1 = require("../../src/handlers/photo-upload-handler");
 const image_edit_service_1 = require("../../src/services/image-edit-service");
 // Import Replicate service
@@ -4671,6 +4672,8 @@ bot.on('message:successful_payment', async (ctx) => {
 // =============================================================================
 // Register image editing handlers
 (0, image_edit_handler_1.registerImageEditHandlers)(bot);
+// Register NSFW consent handlers
+(0, nsfw_consent_handler_1.registerNSFWConsentHandlers)(bot);
 // Debug middleware - log ALL messages
 bot.use(async (ctx, next) => {
     console.log('🔍 DEBUG - Message type:', ctx.message?.text ? 'text' : ctx.message?.photo ? 'photo' : 'other');

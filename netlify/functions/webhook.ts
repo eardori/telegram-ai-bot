@@ -30,6 +30,7 @@ import { getVersionInfoForHelp, getFormattedVersionHistory } from '../../src/uti
 
 // Import image editing handlers
 import { registerImageEditHandlers } from '../../src/handlers/image-edit-handler';
+import { registerNSFWConsentHandlers, checkNSFWAccess, executeWithNSFWTracking } from '../../src/handlers/nsfw-consent-handler';
 import { handlePhotoUpload } from '../../src/handlers/photo-upload-handler';
 import { editImageWithTemplate } from '../../src/services/image-edit-service';
 
@@ -5729,6 +5730,9 @@ bot.on('message:successful_payment', async (ctx) => {
 
 // Register image editing handlers
 registerImageEditHandlers(bot);
+
+// Register NSFW consent handlers
+registerNSFWConsentHandlers(bot);
 
 // Debug middleware - log ALL messages
 bot.use(async (ctx, next) => {
