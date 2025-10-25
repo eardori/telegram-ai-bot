@@ -29,18 +29,32 @@ class ReplicateService {
                 userAgent: 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)',
                 // Custom fetch with Cloudflare Workers proxy support
                 fetch: (input, init) => {
-                    const originalUrl = typeof input === 'string' ? input : input.url;
+                    // Extract URL from input
+                    let originalUrl;
+                    if (typeof input === 'string') {
+                        originalUrl = input;
+                    }
+                    else if (input instanceof Request) {
+                        originalUrl = input.url;
+                    }
+                    else if (typeof input === 'object' && 'url' in input) {
+                        originalUrl = input.url;
+                    }
+                    else {
+                        // Fallback: try to convert to string
+                        originalUrl = String(input);
+                    }
                     const headers = new Headers(init?.headers);
                     // Set User-Agent
                     if (!headers.has('User-Agent')) {
                         headers.set('User-Agent', 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)');
                     }
                     headers.set('Accept', 'application/json');
-                    if (useProxy) {
+                    if (useProxy && originalUrl) {
                         // Route through Cloudflare Workers proxy
                         headers.set('X-Proxy-Auth', proxyAuth);
                         const proxyTargetUrl = `${proxyUrl}?target=${encodeURIComponent(originalUrl)}`;
-                        console.log(`🔄 Proxying request: ${originalUrl?.substring(0, 60) || 'unknown'}...`);
+                        console.log(`🔄 Proxying request: ${originalUrl.substring(0, 60)}...`);
                         return fetch(proxyTargetUrl, {
                             ...init,
                             headers,
