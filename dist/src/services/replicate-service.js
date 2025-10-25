@@ -14,6 +14,8 @@ const replicate_1 = __importDefault(require("replicate"));
 class ReplicateService {
     constructor() {
         const apiToken = process.env.REPLICATE_API_TOKEN;
+        const proxyUrl = process.env.REPLICATE_PROXY_URL;
+        const proxyAuth = process.env.REPLICATE_PROXY_AUTH;
         if (!apiToken) {
             console.warn('⚠️ REPLICATE_API_TOKEN not configured. NSFW features will be disabled.');
             this.isEnabled = false;
@@ -21,26 +23,46 @@ class ReplicateService {
             this.client = null;
         }
         else {
+            const useProxy = !!(proxyUrl && proxyAuth);
             this.client = new replicate_1.default({
                 auth: apiToken,
                 userAgent: 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)',
-                // Custom fetch with additional headers to avoid 403
+                // Custom fetch with Cloudflare Workers proxy support
                 fetch: (input, init) => {
+                    const originalUrl = typeof input === 'string' ? input : input.url;
                     const headers = new Headers(init?.headers);
-                    // Add headers that may help bypass Cloudflare blocks
+                    // Set User-Agent
                     if (!headers.has('User-Agent')) {
                         headers.set('User-Agent', 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)');
                     }
                     headers.set('Accept', 'application/json');
-                    headers.set('X-Requested-With', 'XMLHttpRequest');
-                    return fetch(input, {
-                        ...init,
-                        headers,
-                    });
+                    if (useProxy) {
+                        // Route through Cloudflare Workers proxy
+                        headers.set('X-Proxy-Auth', proxyAuth);
+                        const proxyTargetUrl = `${proxyUrl}?target=${encodeURIComponent(originalUrl)}`;
+                        console.log(`🔄 Proxying request: ${originalUrl.substring(0, 60)}...`);
+                        return fetch(proxyTargetUrl, {
+                            ...init,
+                            headers,
+                        });
+                    }
+                    else {
+                        // Direct connection (fallback)
+                        headers.set('X-Requested-With', 'XMLHttpRequest');
+                        return fetch(input, {
+                            ...init,
+                            headers,
+                        });
+                    }
                 },
             });
             this.isEnabled = true;
-            console.log('✅ Replicate service initialized with custom headers');
+            if (useProxy) {
+                console.log('✅ Replicate service initialized with Cloudflare Workers proxy');
+            }
+            else {
+                console.log('✅ Replicate service initialized with direct connection');
+            }
         }
     }
     /**
