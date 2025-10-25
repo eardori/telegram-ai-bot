@@ -6,7 +6,22 @@
 -- Related: Phase 2 of NSFW implementation
 
 -- ============================================
--- 1. Add NSFW category to prompt_templates
+-- 1. Add requires_nsfw_api column
+-- ============================================
+
+-- Add column if it doesn't exist
+ALTER TABLE prompt_templates
+ADD COLUMN IF NOT EXISTS requires_nsfw_api BOOLEAN DEFAULT false;
+
+-- Add index for quick NSFW template lookups
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_nsfw
+ON prompt_templates(requires_nsfw_api, category)
+WHERE requires_nsfw_api = true;
+
+COMMENT ON COLUMN prompt_templates.requires_nsfw_api IS 'Template requires NSFW API (Replicate) instead of Gemini';
+
+-- ============================================
+-- 2. Check current categories
 -- ============================================
 
 -- Note: Categories are currently stored as TEXT in prompt_templates
@@ -17,14 +32,13 @@
 -- - 'image_editing'
 -- - 'creative_transformations'
 
--- Check current categories
 SELECT DISTINCT category, COUNT(*) as template_count
 FROM prompt_templates
 GROUP BY category
 ORDER BY template_count DESC;
 
 -- ============================================
--- 2. Identify existing NSFW templates
+-- 3. Identify existing NSFW templates
 -- ============================================
 
 -- Templates that likely require NSFW API:
@@ -59,7 +73,7 @@ WHERE
 ORDER BY category, template_key;
 
 -- ============================================
--- 3. Move identified templates to NSFW category
+-- 4. Move identified templates to NSFW category
 -- ============================================
 
 -- Update category for NSFW templates
@@ -87,7 +101,7 @@ WHERE
     AND category != 'nsfw';
 
 -- ============================================
--- 4. Verify NSFW API flag is set correctly
+-- 5. Verify NSFW API flag is set correctly
 -- ============================================
 
 -- Ensure all templates in NSFW category have requires_nsfw_api = true
@@ -99,7 +113,7 @@ WHERE category = 'nsfw'
     AND requires_nsfw_api IS DISTINCT FROM true;
 
 -- ============================================
--- 5. Create NSFW category metadata
+-- 6. Create NSFW category metadata
 -- ============================================
 
 -- Add category descriptions (for future UI)
@@ -116,7 +130,7 @@ Categories:
 - nsfw: Adult content (requires age verification and consent)';
 
 -- ============================================
--- 6. NSFW category statistics view
+-- 7. NSFW category statistics view
 -- ============================================
 
 CREATE OR REPLACE VIEW v_nsfw_category_stats AS
@@ -135,7 +149,7 @@ ORDER BY template_count DESC;
 COMMENT ON VIEW v_nsfw_category_stats IS 'Statistics for NSFW category templates';
 
 -- ============================================
--- 7. List all NSFW templates
+-- 8. List all NSFW templates
 -- ============================================
 
 CREATE OR REPLACE VIEW v_nsfw_templates AS
@@ -162,7 +176,7 @@ ORDER BY priority DESC, template_key;
 COMMENT ON VIEW v_nsfw_templates IS 'All NSFW templates with usage statistics';
 
 -- ============================================
--- 8. Function: Get NSFW templates for UI
+-- 9. Function: Get NSFW templates for UI
 -- ============================================
 
 CREATE OR REPLACE FUNCTION get_nsfw_templates(
@@ -204,7 +218,7 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION get_nsfw_templates IS 'Get NSFW templates for UI display';
 
 -- ============================================
--- 9. Check results
+-- 10. Check results
 -- ============================================
 
 -- View what got moved to NSFW category
@@ -228,7 +242,7 @@ GROUP BY category
 ORDER BY total DESC;
 
 -- ============================================
--- 10. Sample queries for testing
+-- 11. Sample queries for testing
 -- ============================================
 
 -- Get all active NSFW templates
