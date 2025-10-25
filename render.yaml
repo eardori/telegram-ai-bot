@@ -4,8 +4,8 @@ services:
     env: node
     region: singapore  # 한국과 가까운 리전
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: node dist/server.js
+    buildCommand: npm ci --legacy-peer-deps && npm run build
+    startCommand: node dist/src/server.js
     envVars:
       - key: NODE_ENV
         value: production
