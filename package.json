@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "netlify dev",
-    "build": "tsc --skipLibCheck",
+    "build": "tsc --skipLibCheck && echo \"require('./src/server.js');\" > dist/server.js && echo '==> Build output:' && ls -la dist/ && cat dist/server.js",
     "build:skip": "tsc --skipLibCheck --noEmitOnError false",
     "start": "node dist/src/server.js",
     "deploy": "netlify deploy --prod",
