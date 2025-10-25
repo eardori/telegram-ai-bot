@@ -2051,14 +2051,33 @@ bot.callbackQuery(/^p:([a-z0-9]+)$/, async (ctx) => {
       );
 
       // Create action buttons for the edited image (unified UX)
-      const actionKeyboard = new InlineKeyboard()
-        .text('🔄 같은 스타일 다시', `redo:${templateKey}:${fileKey}`).row()
-        .text('🎨 다른 옵션 선택', `t:${templateKey}:${fileKey}`)
-        .text('📂 카테고리에서 선택', `back_to_categories:${fileKey}`).row()
-        .text('🏠 처음으로', `back_to_start:${fileKey}`).row()
-        .row()
-        .text('👍 좋아요', `feedback:like:${templateKey}:${fileKey}`)
-        .text('👎 별로예요', `feedback:dislike:${templateKey}:${fileKey}`);
+      // Calculate total callback_data length to avoid 64-byte limit
+      const testCallbackData = `redo:${templateKey}:${chatId}:${messageId}`;
+
+      let actionKeyboard: InlineKeyboard;
+
+      if (testCallbackData.length > 64) {
+        // Use short callback IDs for long template keys
+        console.log(`⚠️ Template key too long (${testCallbackData.length} bytes), using simplified buttons`);
+
+        // Simplified buttons without template-specific actions
+        actionKeyboard = new InlineKeyboard()
+          .text('📂 카테고리에서 선택', `back_to_categories:${chatId}:${messageId}`).row()
+          .text('🏠 처음으로', `back_to_start:${chatId}:${messageId}`).row()
+          .row()
+          .text('👍 좋아요', `feedback:like:${templateKey.substring(0, 10)}:${chatId}:${messageId}`)
+          .text('👎 별로예요', `feedback:dislike:${templateKey.substring(0, 10)}:${chatId}:${messageId}`);
+      } else {
+        // Full buttons with all actions
+        actionKeyboard = new InlineKeyboard()
+          .text('🔄 같은 스타일 다시', `redo:${templateKey}:${chatId}:${messageId}`).row()
+          .text('🎨 다른 옵션 선택', `t:${templateKey}:${chatId}:${messageId}`)
+          .text('📂 카테고리에서 선택', `back_to_categories:${chatId}:${messageId}`).row()
+          .text('🏠 처음으로', `back_to_start:${chatId}:${messageId}`).row()
+          .row()
+          .text('👍 좋아요', `feedback:like:${templateKey}:${chatId}:${messageId}`)
+          .text('👎 별로예요', `feedback:dislike:${templateKey}:${chatId}:${messageId}`);
+      }
 
       // Build caption with credit info (simplified)
       let caption = `✨ **${templateWithParams.template_name_ko}** 편집 완료!\n\n` +
