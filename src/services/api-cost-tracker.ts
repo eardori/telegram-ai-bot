@@ -15,7 +15,7 @@ import { supabase } from '../utils/supabase';
 export interface APIUsageLog {
   user_id: number;
   chat_id?: number;
-  operation: 'image_analysis' | 'image_edit' | 'text_generation';
+  operation: 'image_analysis' | 'image_edit' | 'text_generation' | 'nsfw_image_gen';
   model: string;
   input_tokens?: number;
   output_tokens?: number;

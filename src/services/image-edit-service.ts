@@ -8,6 +8,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NanoBanafoClient } from './nano-banafo-client';
 import { InputFile } from 'grammy';
 import { logAPIUsage } from './api-cost-tracker';
+import { replicateService } from './replicate-service';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
@@ -91,15 +92,21 @@ CATEGORY-SPECIFIC INSTRUCTIONS (Creative Transform):
 }
 
 /**
- * Edit image using Gemini vision model with template prompt (NanoBanafoClient)
+ * Edit image using appropriate AI model based on category
+ * - NSFW category: Replicate API (Flux.1Dev Uncensored)
+ * - Other categories: Gemini via NanoBanafoClient
  */
 export async function editImageWithTemplate(request: ImageEditRequest): Promise<ImageEditResult> {
   const startTime = Date.now();
 
   try {
-    console.log('🎨 Starting image editing with Gemini...');
+    const isNSFW = request.category === 'nsfw';
+    const modelName = isNSFW ? 'Replicate (NSFW)' : 'Gemini';
+
+    console.log(`🎨 Starting image editing with ${modelName}...`);
     console.log(`📝 Template: ${request.templateName}`);
     console.log(`📋 Category: ${request.category}`);
+    console.log(`🔞 NSFW: ${isNSFW}`);
 
     // Download image to buffer with timeout and retry
     let imageBuffer: Buffer;
@@ -140,9 +147,69 @@ export async function editImageWithTemplate(request: ImageEditRequest): Promise<
       }
     }
 
-    // Create enhanced editing prompt with category-specific instructions
-    const categoryInstructions = getCategoryInstructions(request.category);
-    const editPrompt = `${request.templatePrompt}
+    let editedBuffer: Buffer;
+
+    // Route to appropriate AI model based on category
+    if (isNSFW) {
+      // ============================================
+      // NSFW: Use Replicate API (Flux.1Dev Uncensored)
+      // ============================================
+      console.log('🔄 Routing to Replicate API for NSFW content...');
+
+      // Check if Replicate is available
+      if (!replicateService.isAvailable()) {
+        throw new Error('Replicate API is not configured. NSFW features are unavailable.');
+      }
+
+      // For NSFW, we use text-to-image (not image editing)
+      // Replicate's Flux model doesn't support image-to-image well
+      // So we describe the input image in the prompt
+      const nsfwPrompt = `${request.templatePrompt}
+
+QUALITY REQUIREMENTS:
+- High resolution output (1024x1024)
+- Professional photography quality
+- Photorealistic rendering
+- Sharp details and clear focus
+- Proper lighting and composition
+
+STYLE:
+- Professional photography aesthetic
+- Natural and realistic
+- High-quality professional result`;
+
+      console.log('📝 NSFW Prompt:', nsfwPrompt.substring(0, 200) + '...');
+
+      // Generate NSFW image
+      const resultUrls = await replicateService.generateNSFWImage(nsfwPrompt, {
+        width: 1024,
+        height: 1024,
+        steps: 25,
+        cfg_scale: 7
+      });
+
+      if (!resultUrls || resultUrls.length === 0) {
+        throw new Error('Replicate API returned no results');
+      }
+
+      // Download the generated image
+      console.log('📥 Downloading Replicate result...');
+      const replicateResponse = await fetch(resultUrls[0]);
+      if (!replicateResponse.ok) {
+        throw new Error(`Failed to download Replicate result: ${replicateResponse.status}`);
+      }
+      editedBuffer = Buffer.from(await replicateResponse.arrayBuffer());
+      console.log('✅ Replicate image downloaded');
+
+    } else {
+      // ============================================
+      // Regular: Use Gemini via NanoBanafoClient
+      // ============================================
+      console.log('🔄 Routing to Gemini for regular content...');
+
+      // Create enhanced editing prompt with category-specific instructions
+      const categoryInstructions = getCategoryInstructions(request.category);
+      const editPrompt = `${request.templatePrompt}
 
 ${categoryInstructions}
 
@@ -161,10 +228,11 @@ SUBJECT PRESERVATION:
 
 Generate the edited image following all instructions above.`;
 
-    console.log('🔄 Sending request to Gemini via NanoBanafoClient...');
+      console.log('🔄 Sending request to Gemini via NanoBanafoClient...');
 
-    // Edit image using NanoBanafoClient (Gemini 2.5 Flash Image Preview)
-    const editedBuffer = await geminiClient.editImage(imageBuffer, editPrompt);
+      // Edit image using NanoBanafoClient (Gemini 2.5 Flash Image Preview)
+      editedBuffer = await geminiClient.editImage(imageBuffer, editPrompt);
+    }
 
     const processingTime = Date.now() - startTime;
     console.log(`✅ Image editing completed in ${processingTime}ms`);
@@ -174,9 +242,9 @@ Generate the edited image following all instructions above.`;
       await logAPIUsage({
         user_id: request.userId,
         chat_id: request.chatId,
-        operation: 'image_edit',
-        model: 'gemini-2.5-flash-image-preview',
-        input_images: 1,
+        operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
+        model: isNSFW ? 'flux.1dev-uncensored-v3' : 'gemini-2.5-flash-image-preview',
+        input_images: isNSFW ? 0 : 1, // Replicate is text-to-image
         output_images: 1,
         estimated_cost: 0, // Will be calculated in logAPIUsage
         template_key: request.templateKey,
@@ -197,15 +265,16 @@ Generate the edited image following all instructions above.`;
   } catch (error) {
     console.error('❌ Image editing error:', error);
     const processingTime = Date.now() - startTime;
+    const isNSFW = request.category === 'nsfw';
 
     // Log failed API usage
     if (request.userId) {
       await logAPIUsage({
         user_id: request.userId,
         chat_id: request.chatId,
-        operation: 'image_edit',
-        model: 'gemini-2.5-flash-image-preview',
-        input_images: 1,
+        operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
+        model: isNSFW ? 'flux.1dev-uncensored-v3' : 'gemini-2.5-flash-image-preview',
+        input_images: isNSFW ? 0 : 1,
         output_images: 0,
         estimated_cost: 0,
         template_key: request.templateKey,

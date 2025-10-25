@@ -11,6 +11,7 @@ const generative_ai_1 = require("@google/generative-ai");
 const nano_banafo_client_1 = require("./nano-banafo-client");
 const grammy_1 = require("grammy");
 const api_cost_tracker_1 = require("./api-cost-tracker");
+const replicate_service_1 = require("./replicate-service");
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const genAI = new generative_ai_1.GoogleGenerativeAI(GOOGLE_API_KEY);
 const geminiClient = new nano_banafo_client_1.NanoBanafoClient();
@@ -68,14 +69,19 @@ CATEGORY-SPECIFIC INSTRUCTIONS (Creative Transform):
     return instructions[category] || '';
 }
 /**
- * Edit image using Gemini vision model with template prompt (NanoBanafoClient)
+ * Edit image using appropriate AI model based on category
+ * - NSFW category: Replicate API (Flux.1Dev Uncensored)
+ * - Other categories: Gemini via NanoBanafoClient
  */
 async function editImageWithTemplate(request) {
     const startTime = Date.now();
     try {
-        console.log('🎨 Starting image editing with Gemini...');
+        const isNSFW = request.category === 'nsfw';
+        const modelName = isNSFW ? 'Replicate (NSFW)' : 'Gemini';
+        console.log(`🎨 Starting image editing with ${modelName}...`);
         console.log(`📝 Template: ${request.templateName}`);
         console.log(`📋 Category: ${request.category}`);
+        console.log(`🔞 NSFW: ${isNSFW}`);
         // Download image to buffer with timeout and retry
         let imageBuffer;
         let retries = 3;
@@ -106,9 +112,61 @@ async function editImageWithTemplate(request) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
-        // Create enhanced editing prompt with category-specific instructions
-        const categoryInstructions = getCategoryInstructions(request.category);
-        const editPrompt = `${request.templatePrompt}
+        let editedBuffer;
+        // Route to appropriate AI model based on category
+        if (isNSFW) {
+            // ============================================
+            // NSFW: Use Replicate API (Flux.1Dev Uncensored)
+            // ============================================
+            console.log('🔄 Routing to Replicate API for NSFW content...');
+            // Check if Replicate is available
+            if (!replicate_service_1.replicateService.isAvailable()) {
+                throw new Error('Replicate API is not configured. NSFW features are unavailable.');
+            }
+            // For NSFW, we use text-to-image (not image editing)
+            // Replicate's Flux model doesn't support image-to-image well
+            // So we describe the input image in the prompt
+            const nsfwPrompt = `${request.templatePrompt}
+
+QUALITY REQUIREMENTS:
+- High resolution output (1024x1024)
+- Professional photography quality
+- Photorealistic rendering
+- Sharp details and clear focus
+- Proper lighting and composition
+
+STYLE:
+- Professional photography aesthetic
+- Natural and realistic
+- High-quality professional result`;
+            console.log('📝 NSFW Prompt:', nsfwPrompt.substring(0, 200) + '...');
+            // Generate NSFW image
+            const resultUrls = await replicate_service_1.replicateService.generateNSFWImage(nsfwPrompt, {
+                width: 1024,
+                height: 1024,
+                steps: 25,
+                cfg_scale: 7
+            });
+            if (!resultUrls || resultUrls.length === 0) {
+                throw new Error('Replicate API returned no results');
+            }
+            // Download the generated image
+            console.log('📥 Downloading Replicate result...');
+            const replicateResponse = await fetch(resultUrls[0]);
+            if (!replicateResponse.ok) {
+                throw new Error(`Failed to download Replicate result: ${replicateResponse.status}`);
+            }
+            editedBuffer = Buffer.from(await replicateResponse.arrayBuffer());
+            console.log('✅ Replicate image downloaded');
+        }
+        else {
+            // ============================================
+            // Regular: Use Gemini via NanoBanafoClient
+            // ============================================
+            console.log('🔄 Routing to Gemini for regular content...');
+            // Create enhanced editing prompt with category-specific instructions
+            const categoryInstructions = getCategoryInstructions(request.category);
+            const editPrompt = `${request.templatePrompt}
 
 ${categoryInstructions}
 
@@ -126,9 +184,10 @@ SUBJECT PRESERVATION:
 - Natural pose and expression
 
 Generate the edited image following all instructions above.`;
-        console.log('🔄 Sending request to Gemini via NanoBanafoClient...');
-        // Edit image using NanoBanafoClient (Gemini 2.5 Flash Image Preview)
-        const editedBuffer = await geminiClient.editImage(imageBuffer, editPrompt);
+            console.log('🔄 Sending request to Gemini via NanoBanafoClient...');
+            // Edit image using NanoBanafoClient (Gemini 2.5 Flash Image Preview)
+            editedBuffer = await geminiClient.editImage(imageBuffer, editPrompt);
+        }
         const processingTime = Date.now() - startTime;
         console.log(`✅ Image editing completed in ${processingTime}ms`);
         // Log API usage for cost tracking
@@ -136,9 +195,9 @@ Generate the edited image following all instructions above.`;
             await (0, api_cost_tracker_1.logAPIUsage)({
                 user_id: request.userId,
                 chat_id: request.chatId,
-                operation: 'image_edit',
-                model: 'gemini-2.5-flash-image-preview',
-                input_images: 1,
+                operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
+                model: isNSFW ? 'flux.1dev-uncensored-v3' : 'gemini-2.5-flash-image-preview',
+                input_images: isNSFW ? 0 : 1, // Replicate is text-to-image
                 output_images: 1,
                 estimated_cost: 0, // Will be calculated in logAPIUsage
                 template_key: request.templateKey,
@@ -157,14 +216,15 @@ Generate the edited image following all instructions above.`;
     catch (error) {
         console.error('❌ Image editing error:', error);
         const processingTime = Date.now() - startTime;
+        const isNSFW = request.category === 'nsfw';
         // Log failed API usage
         if (request.userId) {
             await (0, api_cost_tracker_1.logAPIUsage)({
                 user_id: request.userId,
                 chat_id: request.chatId,
-                operation: 'image_edit',
-                model: 'gemini-2.5-flash-image-preview',
-                input_images: 1,
+                operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
+                model: isNSFW ? 'flux.1dev-uncensored-v3' : 'gemini-2.5-flash-image-preview',
+                input_images: isNSFW ? 0 : 1,
                 output_images: 0,
                 estimated_cost: 0,
                 template_key: request.templateKey,
