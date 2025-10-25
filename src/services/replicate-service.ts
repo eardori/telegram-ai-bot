@@ -176,11 +176,39 @@ class ReplicateService {
     console.log(`🔧 Denoising: ${options.denoising || 0.75}`);
 
     try {
+      // Download and process the image to ensure compatible dimensions
+      console.log('📥 Downloading and processing source image...');
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to download image: ${imageResponse.status}`);
+      }
+
+      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+
+      // Use Sharp to resize image to compatible dimensions (divisible by 8)
+      const sharp = require('sharp');
+      const metadata = await sharp(imageBuffer).metadata();
+      console.log(`📐 Original size: ${metadata.width}x${metadata.height}`);
+
+      // Calculate target dimensions (divisible by 8, maintain aspect ratio)
+      const targetWidth = Math.floor((metadata.width || 1024) / 8) * 8;
+      const targetHeight = Math.floor((metadata.height || 1024) / 8) * 8;
+      console.log(`📐 Target size: ${targetWidth}x${targetHeight}`);
+
+      const processedBuffer = await sharp(imageBuffer)
+        .resize(targetWidth, targetHeight, { fit: 'cover' })
+        .jpeg({ quality: 95 })
+        .toBuffer();
+
+      // Convert to base64 data URI
+      const base64Image = `data:image/jpeg;base64,${processedBuffer.toString('base64')}`;
+      console.log(`✅ Image processed (${Math.round(base64Image.length / 1024)}KB)`);
+
       const output = await this.client.run(
         "bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5",
         {
           input: {
-            image: imageUrl,
+            image: base64Image,  // Use processed base64 image instead of URL
             positive_prompt: prompt,
             denoising: options.denoising || 0.75,  // Lower = more similar to original
             steps: options.steps || 20,
