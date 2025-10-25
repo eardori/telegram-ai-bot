@@ -86,8 +86,9 @@ class ReplicateService {
         return this.isEnabled;
     }
     /**
-     * Generate NSFW image from text prompt
+     * Generate NSFW image from text prompt (Text-to-Image)
      * Uses Flux.1Dev Uncensored model (MSFLUX NSFW v3)
+     * WARNING: This is text-to-image only, does not preserve original person
      */
     async generateNSFWImage(prompt, options = {}) {
         if (!this.isEnabled) {
@@ -111,6 +112,66 @@ class ReplicateService {
         }
         catch (error) {
             console.error('❌ Replicate image generation error:', {
+                message: error.message,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                stack: error.stack,
+            });
+            throw error;
+        }
+    }
+    /**
+     * Generate NSFW image from input image (Image-to-Image)
+     * Uses Flux img2img model - preserves original person
+     * @param imageBuffer - Buffer containing the original image
+     * @param prompt - Transformation prompt
+     * @param denoising - Strength of transformation (0.5-1.0, default 0.75)
+     */
+    async generateNSFWImageFromImage(imageBuffer, prompt, options = {}) {
+        if (!this.isEnabled) {
+            throw new Error('Replicate service is not configured. Please add REPLICATE_API_TOKEN to environment variables.');
+        }
+        console.log(`🎨 Generating NSFW image-to-image with Flux: "${prompt}"`);
+        console.log(`📸 Source image size: ${imageBuffer.length} bytes`);
+        console.log(`🔧 Denoising: ${options.denoising || 0.75}`);
+        try {
+            // Process the image to ensure compatible dimensions
+            console.log('📐 Processing source image...');
+            // Use Sharp to resize image to compatible dimensions (divisible by 8)
+            console.log('🔍 Loading Sharp library...');
+            const sharp = require('sharp');
+            console.log('✅ Sharp loaded successfully');
+            console.log('🔍 Getting image metadata...');
+            const metadata = await sharp(imageBuffer).metadata();
+            console.log(`📐 Original size: ${metadata.width}x${metadata.height}`);
+            // Calculate target dimensions (divisible by 8, maintain aspect ratio)
+            const targetWidth = Math.floor((metadata.width || 1024) / 8) * 8;
+            const targetHeight = Math.floor((metadata.height || 1024) / 8) * 8;
+            console.log(`📐 Target size: ${targetWidth}x${targetHeight}`);
+            const processedBuffer = await sharp(imageBuffer)
+                .resize(targetWidth, targetHeight, { fit: 'cover' })
+                .jpeg({ quality: 95 })
+                .toBuffer();
+            // Convert to base64 data URI
+            const base64Image = `data:image/jpeg;base64,${processedBuffer.toString('base64')}`;
+            console.log(`✅ Image processed (${Math.round(base64Image.length / 1024)}KB)`);
+            const output = await this.client.run("bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5", {
+                input: {
+                    image: base64Image, // Use processed base64 image instead of URL
+                    positive_prompt: prompt,
+                    denoising: options.denoising || 0.75, // Lower = more similar to original
+                    steps: options.steps || 20,
+                    seed: options.seed || -1,
+                    scheduler: "simple",
+                    sampler_name: "euler"
+                }
+            });
+            console.log('✅ NSFW image-to-image generated successfully');
+            return output;
+        }
+        catch (error) {
+            console.error('❌ Replicate image-to-image generation error:', {
                 message: error.message,
                 status: error.response?.status,
                 statusText: error.response?.statusText,

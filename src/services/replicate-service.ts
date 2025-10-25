@@ -180,7 +180,11 @@ class ReplicateService {
       console.log('📐 Processing source image...');
 
       // Use Sharp to resize image to compatible dimensions (divisible by 8)
+      console.log('🔍 Loading Sharp library...');
       const sharp = require('sharp');
+      console.log('✅ Sharp loaded successfully');
+
+      console.log('🔍 Getting image metadata...');
       const metadata = await sharp(imageBuffer).metadata();
       console.log(`📐 Original size: ${metadata.width}x${metadata.height}`);
 
