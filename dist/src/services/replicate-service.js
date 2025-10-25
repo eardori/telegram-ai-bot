@@ -40,7 +40,7 @@ class ReplicateService {
                         // Route through Cloudflare Workers proxy
                         headers.set('X-Proxy-Auth', proxyAuth);
                         const proxyTargetUrl = `${proxyUrl}?target=${encodeURIComponent(originalUrl)}`;
-                        console.log(`🔄 Proxying request: ${originalUrl.substring(0, 60)}...`);
+                        console.log(`🔄 Proxying request: ${originalUrl?.substring(0, 60) || 'unknown'}...`);
                         return fetch(proxyTargetUrl, {
                             ...init,
                             headers,

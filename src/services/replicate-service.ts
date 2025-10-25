@@ -50,7 +50,7 @@ class ReplicateService {
         userAgent: 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)',
         // Custom fetch with Cloudflare Workers proxy support
         fetch: (input: string | Request, init?: RequestInit) => {
-          const originalUrl = typeof input === 'string' ? input : input.url;
+          const originalUrl = typeof input === 'string' ? input : (input as Request).url;
           const headers = new Headers(init?.headers);
 
           // Set User-Agent
@@ -64,7 +64,7 @@ class ReplicateService {
             headers.set('X-Proxy-Auth', proxyAuth!);
             const proxyTargetUrl = `${proxyUrl}?target=${encodeURIComponent(originalUrl)}`;
 
-            console.log(`🔄 Proxying request: ${originalUrl.substring(0, 60)}...`);
+            console.log(`🔄 Proxying request: ${originalUrl?.substring(0, 60) || 'unknown'}...`);
 
             return fetch(proxyTargetUrl, {
               ...init,
