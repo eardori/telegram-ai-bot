@@ -7,7 +7,7 @@ npm-debug.log*
 .env.local
 
 # Build outputs
-# dist/  # Keep dist for Netlify
+dist/  # Build on server (Render.com)
 build/
 
 # Logs
