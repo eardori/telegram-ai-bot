@@ -177,7 +177,7 @@ class ReplicateService {
 
     try {
       const output = await this.client.run(
-        "bxclib2/flux_img2img:0e918fe971eaa64f7c6d56f0a26d2b3c3dad8cd74f9ae23cc47e4b0e08e7b77e",
+        "bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5",
         {
           input: {
             image: imageUrl,
