@@ -6,6 +6,51 @@
 -- Related: Phase 2 of NSFW implementation
 
 -- ============================================
+-- 0. Fix CHECK constraint to allow 'nsfw' category
+-- ============================================
+
+-- IMPORTANT: Must fix any invalid existing data FIRST before modifying constraint
+
+-- Step 0: Check for any rows with invalid categories (for debugging)
+DO $$
+DECLARE
+    invalid_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO invalid_count
+    FROM prompt_templates
+    WHERE category NOT IN ('3d_figure', 'portrait', 'game_anime', 'image_editing', 'creative_transformations', 'nsfw');
+
+    IF invalid_count > 0 THEN
+        RAISE NOTICE 'Found % rows with invalid categories', invalid_count;
+
+        -- Show invalid rows
+        RAISE NOTICE 'Invalid categories: %', (
+            SELECT string_agg(DISTINCT category, ', ')
+            FROM prompt_templates
+            WHERE category NOT IN ('3d_figure', 'portrait', 'game_anime', 'image_editing', 'creative_transformations', 'nsfw')
+        );
+    END IF;
+END $$;
+
+-- Step 1: Fix any rows with NULL or invalid categories (safety measure)
+UPDATE prompt_templates
+SET category = 'image_editing'
+WHERE category IS NULL
+   OR category NOT IN ('3d_figure', 'portrait', 'game_anime', 'image_editing', 'creative_transformations', 'nsfw');
+
+-- Step 2: Drop existing CHECK constraint completely
+ALTER TABLE prompt_templates
+DROP CONSTRAINT IF EXISTS prompt_templates_category_check;
+
+-- Step 3: Add new constraint with 'nsfw' included
+ALTER TABLE prompt_templates
+ADD CONSTRAINT prompt_templates_category_check
+CHECK (category IN ('3d_figure', 'portrait', 'game_anime', 'image_editing', 'creative_transformations', 'nsfw'));
+
+COMMENT ON CONSTRAINT prompt_templates_category_check ON prompt_templates IS
+'Allowed category values: 3d_figure, portrait, game_anime, image_editing, creative_transformations, nsfw';
+
+-- ============================================
 -- 1. Add requires_nsfw_api column
 -- ============================================
 
@@ -21,7 +66,7 @@ WHERE requires_nsfw_api = true;
 COMMENT ON COLUMN prompt_templates.requires_nsfw_api IS 'Template requires NSFW API (Replicate) instead of Gemini';
 
 -- ============================================
--- 2. Check current categories
+-- 2. Check current categories (informational only)
 -- ============================================
 
 -- Note: Categories are currently stored as TEXT in prompt_templates
@@ -32,13 +77,14 @@ COMMENT ON COLUMN prompt_templates.requires_nsfw_api IS 'Template requires NSFW 
 -- - 'image_editing'
 -- - 'creative_transformations'
 
-SELECT DISTINCT category, COUNT(*) as template_count
-FROM prompt_templates
-GROUP BY category
-ORDER BY template_count DESC;
+-- COMMENTED OUT: This is informational only, can run manually if needed
+-- SELECT DISTINCT category, COUNT(*) as template_count
+-- FROM prompt_templates
+-- GROUP BY category
+-- ORDER BY template_count DESC;
 
 -- ============================================
--- 3. Identify existing NSFW templates
+-- 3. Identify existing NSFW templates (informational only)
 -- ============================================
 
 -- Templates that likely require NSFW API:
@@ -46,31 +92,31 @@ ORDER BY template_count DESC;
 -- - Revealing outfit transformations
 -- - Certain pose/style changes
 
--- Current templates that should be NSFW:
-SELECT
-    template_key,
-    template_name_ko,
-    template_name_en,
-    category,
-    subcategory,
-    requires_nsfw_api
-FROM prompt_templates
-WHERE
-    -- Keywords that suggest NSFW content
-    (base_prompt ILIKE '%swimwear%'
-    OR base_prompt ILIKE '%lingerie%'
-    OR base_prompt ILIKE '%revealing%'
-    OR base_prompt ILIKE '%seductive%'
-    OR base_prompt ILIKE '%bikini%'
-    OR base_prompt ILIKE '%nude%'
-    OR base_prompt ILIKE '%nsfw%'
-    OR base_prompt ILIKE '%adult%'
-    OR base_prompt ILIKE '%erotic%'
-    OR base_prompt ILIKE '%sensual%')
-    OR template_key ILIKE '%nsfw%'
-    OR template_key ILIKE '%adult%'
-    OR requires_nsfw_api = true
-ORDER BY category, template_key;
+-- COMMENTED OUT: This SELECT can be run manually after column is created
+-- SELECT
+--     template_key,
+--     template_name_ko,
+--     template_name_en,
+--     category,
+--     subcategory,
+--     requires_nsfw_api
+-- FROM prompt_templates
+-- WHERE
+--     -- Keywords that suggest NSFW content
+--     (base_prompt ILIKE '%swimwear%'
+--     OR base_prompt ILIKE '%lingerie%'
+--     OR base_prompt ILIKE '%revealing%'
+--     OR base_prompt ILIKE '%seductive%'
+--     OR base_prompt ILIKE '%bikini%'
+--     OR base_prompt ILIKE '%nude%'
+--     OR base_prompt ILIKE '%nsfw%'
+--     OR base_prompt ILIKE '%adult%'
+--     OR base_prompt ILIKE '%erotic%'
+--     OR base_prompt ILIKE '%sensual%')
+--     OR template_key ILIKE '%nsfw%'
+--     OR template_key ILIKE '%adult%'
+--     OR requires_nsfw_api = true
+-- ORDER BY category, template_key;
 
 -- ============================================
 -- 4. Move identified templates to NSFW category
@@ -218,28 +264,30 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION get_nsfw_templates IS 'Get NSFW templates for UI display';
 
 -- ============================================
--- 10. Check results
+-- 10. Check results (run these manually to verify)
 -- ============================================
 
+-- COMMENTED OUT: Run these SELECT queries manually after script completes
+
 -- View what got moved to NSFW category
-SELECT
-    template_key,
-    template_name_ko,
-    subcategory,
-    template_type,
-    requires_nsfw_api,
-    is_active
-FROM v_nsfw_templates;
+-- SELECT
+--     template_key,
+--     template_name_ko,
+--     subcategory,
+--     template_type,
+--     requires_nsfw_api,
+--     is_active
+-- FROM v_nsfw_templates;
 
 -- View category distribution
-SELECT
-    category,
-    COUNT(*) as total,
-    COUNT(*) FILTER (WHERE is_active = true) as active,
-    COUNT(*) FILTER (WHERE requires_nsfw_api = true) as nsfw_api_required
-FROM prompt_templates
-GROUP BY category
-ORDER BY total DESC;
+-- SELECT
+--     category,
+--     COUNT(*) as total,
+--     COUNT(*) FILTER (WHERE is_active = true) as active,
+--     COUNT(*) FILTER (WHERE requires_nsfw_api = true) as nsfw_api_required
+-- FROM prompt_templates
+-- GROUP BY category
+-- ORDER BY total DESC;
 
 -- ============================================
 -- 11. Sample queries for testing
