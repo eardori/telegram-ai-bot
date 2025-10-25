@@ -180,8 +180,9 @@ STYLE:
       console.log('📝 NSFW Prompt:', nsfwPrompt.substring(0, 200) + '...');
 
       // Generate NSFW image using Image-to-Image (preserves original person)
+      // Pass the already downloaded imageBuffer instead of downloading again
       const resultUrls = await replicateService.generateNSFWImageFromImage(
-        request.imageUrl,
+        imageBuffer!,  // Use the already downloaded buffer
         nsfwPrompt,
         {
           denoising: 0.75,  // Balance between transformation and preservation

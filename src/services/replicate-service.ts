@@ -158,12 +158,12 @@ class ReplicateService {
   /**
    * Generate NSFW image from input image (Image-to-Image)
    * Uses Flux img2img model - preserves original person
-   * @param imageUrl - URL of the original image
+   * @param imageBuffer - Buffer containing the original image
    * @param prompt - Transformation prompt
    * @param denoising - Strength of transformation (0.5-1.0, default 0.75)
    */
   async generateNSFWImageFromImage(
-    imageUrl: string,
+    imageBuffer: Buffer,
     prompt: string,
     options: { denoising?: number; steps?: number; seed?: number } = {}
   ): Promise<string[]> {
@@ -172,18 +172,12 @@ class ReplicateService {
     }
 
     console.log(`🎨 Generating NSFW image-to-image with Flux: "${prompt}"`);
-    console.log(`📸 Source image: ${imageUrl}`);
+    console.log(`📸 Source image size: ${imageBuffer.length} bytes`);
     console.log(`🔧 Denoising: ${options.denoising || 0.75}`);
 
     try {
-      // Download and process the image to ensure compatible dimensions
-      console.log('📥 Downloading and processing source image...');
-      const imageResponse = await fetch(imageUrl);
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to download image: ${imageResponse.status}`);
-      }
-
-      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      // Process the image to ensure compatible dimensions
+      console.log('📐 Processing source image...');
 
       // Use Sharp to resize image to compatible dimensions (divisible by 8)
       const sharp = require('sharp');
