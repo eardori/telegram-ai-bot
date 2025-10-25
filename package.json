@@ -1,6 +1,6 @@
 {
   "name": "telegram-ai-bot",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Telegram group chat AI bot with message summarization and image generation",
   "main": "index.js",
   "scripts": {
@@ -10,7 +10,8 @@
     "start": "node dist/src/server.js",
     "deploy": "netlify deploy --prod",
     "test": "echo 'No tests configured'",
-    "prepare": "echo 'Prepare step completed'"
+    "prepare": "echo 'Prepare step completed'",
+    "postinstall": "echo '==> Cleaning old dist...' && rm -rf dist"
   },
   "keywords": [
     "telegram",
