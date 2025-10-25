@@ -103,10 +103,12 @@ export async function editImageWithTemplate(request: ImageEditRequest): Promise<
     const isNSFW = request.category === 'nsfw';
     const modelName = isNSFW ? 'Replicate (NSFW)' : 'Gemini';
 
-    console.log(`🎨 Starting image editing with ${modelName}...`);
+    console.log('='.repeat(80));
+    console.log(`🎨 [v1.0.2] Starting image editing with ${modelName}...`);
     console.log(`📝 Template: ${request.templateName}`);
-    console.log(`📋 Category: ${request.category}`);
-    console.log(`🔞 NSFW: ${isNSFW}`);
+    console.log(`📋 Category: "${request.category}" (type: ${typeof request.category})`);
+    console.log(`🔞 NSFW check: request.category === 'nsfw' => ${isNSFW}`);
+    console.log('='.repeat(80));
 
     // Download image to buffer with timeout and retry
     let imageBuffer: Buffer;

@@ -171,7 +171,10 @@ class ReplicateService {
       throw new Error('Replicate service is not configured. Please add REPLICATE_API_TOKEN to environment variables.');
     }
 
-    console.log(`🎨 Generating NSFW image-to-image with Flux: "${prompt}"`);
+    console.log('='.repeat(80));
+    console.log('🚨 NSFW IMAGE-TO-IMAGE GENERATION STARTED (v1.0.2)');
+    console.log('='.repeat(80));
+    console.log(`🎨 Generating NSFW image-to-image with Flux: "${prompt.substring(0, 100)}..."`);
     console.log(`📸 Source image size: ${imageBuffer.length} bytes`);
     console.log(`🔧 Denoising: ${options.denoising || 0.75}`);
 
