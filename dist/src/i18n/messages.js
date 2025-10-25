@@ -58,6 +58,7 @@ exports.messages = {
         categoryGameAnimation: '게임/애니',
         categoryImageEditing: '이미지 편집',
         categoryCreativeTransform: '창의적 변환',
+        categoryNSFW: '🔞 성인 전용',
         // Language
         languageChanged: (lang) => `✅ 언어가 ${lang}(으)로 변경되었습니다.`,
         selectLanguage: '🌍 언어를 선택해주세요:',
@@ -115,6 +116,7 @@ exports.messages = {
         categoryGameAnimation: 'Game/Animation',
         categoryImageEditing: 'Image Editing',
         categoryCreativeTransform: 'Creative Transform',
+        categoryNSFW: '🔞 Adult Content',
         // Language
         languageChanged: (lang) => `✅ Language changed to ${lang}.`,
         selectLanguage: '🌍 Please select your language:',

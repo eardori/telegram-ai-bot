@@ -64,6 +64,7 @@ interface Messages {
   categoryGameAnimation: string;
   categoryImageEditing: string;
   categoryCreativeTransform: string;
+  categoryNSFW: string;
 
   // Language
   languageChanged: (lang: string) => string;
@@ -138,6 +139,7 @@ export const messages: Record<Language, Messages> = {
     categoryGameAnimation: '게임/애니',
     categoryImageEditing: '이미지 편집',
     categoryCreativeTransform: '창의적 변환',
+    categoryNSFW: '🔞 성인 전용',
 
     // Language
     languageChanged: (lang: string) => `✅ 언어가 ${lang}(으)로 변경되었습니다.`,
@@ -211,6 +213,7 @@ export const messages: Record<Language, Messages> = {
     categoryGameAnimation: 'Game/Animation',
     categoryImageEditing: 'Image Editing',
     categoryCreativeTransform: 'Creative Transform',
+    categoryNSFW: '🔞 Adult Content',
 
     // Language
     languageChanged: (lang: string) => `✅ Language changed to ${lang}.`,
