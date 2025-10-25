@@ -85,6 +85,9 @@ COMMENT ON VIEW v_nsfw_daily_usage IS 'Daily NSFW usage statistics per user';
 -- 4. Function: Check NSFW Daily Limit
 -- ============================================
 
+-- Drop existing function if it exists (to allow return type change)
+DROP FUNCTION IF EXISTS check_nsfw_daily_limit(BIGINT);
+
 CREATE OR REPLACE FUNCTION check_nsfw_daily_limit(
     p_user_id BIGINT
 ) RETURNS TABLE(
