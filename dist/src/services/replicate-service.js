@@ -50,7 +50,13 @@ class ReplicateService {
                         headers.set('User-Agent', 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)');
                     }
                     headers.set('Accept', 'application/json');
-                    if (useProxy && originalUrl) {
+                    // Skip proxy for file uploads (multipart/form-data not supported)
+                    const isFileUpload = originalUrl.includes('/v1/files') ||
+                        headers.get('Content-Type')?.includes('multipart/form-data');
+                    if (isFileUpload) {
+                        console.log(`📤 File upload detected - bypassing proxy: ${originalUrl.substring(0, 60)}...`);
+                    }
+                    if (useProxy && originalUrl && !isFileUpload) {
                         // Route through Cloudflare Workers proxy
                         headers.set('X-Proxy-Auth', proxyAuth);
                         const proxyTargetUrl = `${proxyUrl}?target=${encodeURIComponent(originalUrl)}`;
