@@ -48,6 +48,11 @@ const PRICING = {
   // Replicate FLUX.1 [dev] - Official Black Forest Labs model
   'black-forest-labs/flux-dev': {
     per_image: 0.030  // $0.030 per image (text-to-image or image-to-image)
+  },
+
+  // Replicate FLUX 1.1 Pro - Premium quality, NSFW support
+  'black-forest-labs/flux-1.1-pro': {
+    per_image: 0.055  // $0.055 per image (highest quality, no NSFW filtering)
   }
 };
 

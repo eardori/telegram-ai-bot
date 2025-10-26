@@ -1,6 +1,6 @@
 {
   "name": "telegram-ai-bot",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Telegram group chat AI bot with message summarization and image generation",
   "main": "index.js",
   "scripts": {

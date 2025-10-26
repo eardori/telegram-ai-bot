@@ -208,7 +208,7 @@ Generate the edited image following all instructions above.`;
                 user_id: request.userId,
                 chat_id: request.chatId,
                 operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
-                model: isNSFW ? 'black-forest-labs/flux-dev' : 'gemini-2.5-flash-image-preview',
+                model: isNSFW ? 'black-forest-labs/flux-1.1-pro' : 'gemini-2.5-flash-image-preview',
                 input_images: 1, // Both use image-to-image now
                 output_images: 1,
                 estimated_cost: 0, // Will be calculated in logAPIUsage
@@ -235,7 +235,7 @@ Generate the edited image following all instructions above.`;
                 user_id: request.userId,
                 chat_id: request.chatId,
                 operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
-                model: isNSFW ? 'black-forest-labs/flux-dev' : 'gemini-2.5-flash-image-preview',
+                model: isNSFW ? 'black-forest-labs/flux-1.1-pro' : 'gemini-2.5-flash-image-preview',
                 input_images: 1,
                 output_images: 0,
                 estimated_cost: 0,
@@ -271,7 +271,7 @@ async function editImageWithReplicate(request) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                version: 'black-forest-labs/flux-dev',
+                version: 'black-forest-labs/flux-1.1-pro',
                 input: {
                     prompt: request.templatePrompt,
                     image: request.imageUrl,

@@ -235,31 +235,31 @@ class ReplicateService {
         dimensions: `${processedMetadata.width}x${processedMetadata.height}`
       });
 
-      // Use official Black Forest Labs FLUX.1 [dev] model with image-to-image
+      // Use FLUX 1.1 Pro - highest quality, supports NSFW, no content filtering
       const inputConfig = {
-        image: base64Image,  // Base64 data URI
         prompt: prompt,  // Text description
-        prompt_strength: options.denoising || 0.8,  // 0-1, how much to transform (0.8 = strong transform)
-        guidance: 3.5,  // CFG scale, 0-10
-        num_inference_steps: options.steps || 28,  // Denoising steps, default 28
-        num_outputs: 1,  // Number of images
-        aspect_ratio: "1:1",  // Keep square
+        image_prompt: base64Image,  // Base64 data URI to guide composition
+        width: processedMetadata.width,  // Maintain original dimensions
+        height: processedMetadata.height,
+        aspect_ratio: "custom",  // Use custom width/height
         output_format: "jpg",
         output_quality: 90,
-        seed: options.seed && options.seed > 0 ? options.seed : undefined  // Optional seed
+        safety_tolerance: 6,  // Maximum tolerance (1-6, higher = less filtering)
+        prompt_upsampling: false,  // Keep prompt as-is
+        seed: options.seed && options.seed > 0 ? options.seed : undefined
       };
 
-      console.log('🚀 Calling Replicate.run with model: black-forest-labs/flux-dev (official)');
+      console.log('🚀 Calling Replicate.run with model: black-forest-labs/flux-1.1-pro (PREMIUM)');
       console.log('📋 Input config:', {
-        imageLength: base64Image.length,
+        imagePromptLength: base64Image.length,
         promptLength: prompt.length,
-        prompt_strength: inputConfig.prompt_strength,
-        guidance: inputConfig.guidance,
-        steps: inputConfig.num_inference_steps
+        dimensions: `${inputConfig.width}x${inputConfig.height}`,
+        safety_tolerance: inputConfig.safety_tolerance,
+        output_quality: inputConfig.output_quality
       });
 
       const output = await this.client.run(
-        "black-forest-labs/flux-dev",
+        "black-forest-labs/flux-1.1-pro",
         { input: inputConfig }
       );
 
