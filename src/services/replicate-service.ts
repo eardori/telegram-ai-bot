@@ -264,6 +264,14 @@ class ReplicateService {
       );
 
       console.log('✅ NSFW image-to-image generated successfully');
+      console.log('📦 Output type:', typeof output);
+      console.log('📦 Output value:', JSON.stringify(output).substring(0, 200));
+
+      // FLUX 1.1 Pro returns a single URL string, not an array
+      if (typeof output === 'string') {
+        return [output];
+      }
+
       return output as string[];
     } catch (error: any) {
       console.error('❌ Replicate image-to-image generation error:', {
