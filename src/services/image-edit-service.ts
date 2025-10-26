@@ -110,7 +110,7 @@ export async function editImageWithTemplate(request: ImageEditRequest): Promise<
     console.log(`🔞 NSFW check: request.category === 'nsfw' => ${isNSFW}`);
     console.log('='.repeat(80));
 
-    // Download image to buffer with timeout and retry
+    // Download image to buffer with extended timeout and DNS options
     let imageBuffer: Buffer;
     let retries = 3;
     let lastError: Error | null = null;
@@ -120,32 +120,44 @@ export async function editImageWithTemplate(request: ImageEditRequest): Promise<
         console.log(`🔄 Downloading image (attempt ${attempt}/${retries})...`);
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000); // 15초 타임아웃
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30초 타임아웃 (증가)
 
         const imageResponse = await fetch(request.imageUrl, {
-          signal: controller.signal
+          signal: controller.signal,
+          // DNS 및 연결 최적화
+          headers: {
+            'User-Agent': 'MultifulBot/1.0 (https://t.me/MultifulDobi_bot)',
+            'Connection': 'keep-alive'
+          }
         });
 
         clearTimeout(timeout);
 
         if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status}`);
+          throw new Error(`HTTP ${imageResponse.status}: ${imageResponse.statusText}`);
         }
 
         imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-        console.log('✅ Image downloaded, size:', imageBuffer.length, 'bytes');
+        console.log(`✅ Image downloaded successfully (${imageBuffer.length} bytes) on attempt ${attempt}`);
         break; // 성공하면 루프 탈출
 
       } catch (error) {
         lastError = error as Error;
-        console.error(`❌ Download attempt ${attempt} failed:`, error);
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`❌ Download attempt ${attempt}/${retries} failed:`, errorMsg);
 
         if (attempt === retries) {
-          throw new Error(`Failed to download image after ${retries} attempts: ${lastError.message}`);
+          // 모든 재시도 실패 - 명확한 에러 메시지
+          throw new Error(
+            `이미지 다운로드 실패 (${retries}회 시도): ${errorMsg}. ` +
+            `서버-Telegram API 연결 문제일 수 있습니다. 잠시 후 다시 시도해주세요.`
+          );
         }
 
-        // 재시도 전 1초 대기
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 재시도 전 지수 백오프 대기 (1초, 2초, 4초)
+        const waitTime = Math.pow(2, attempt - 1) * 1000;
+        console.log(`⏳ ${waitTime}ms 후 재시도...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
 
