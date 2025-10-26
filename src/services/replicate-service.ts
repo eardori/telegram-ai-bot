@@ -207,16 +207,17 @@ class ReplicateService {
       // Verify processed image dimensions
       const processedMetadata = await sharp(processedBuffer).metadata();
       console.log(`✅ Processed size: ${processedMetadata.width}x${processedMetadata.height}`);
+      console.log(`📦 Processed buffer size: ${processedBuffer.length} bytes`);
 
-      // Convert to base64 data URI
-      const base64Image = `data:image/jpeg;base64,${processedBuffer.toString('base64')}`;
-      console.log(`✅ Image processed (${Math.round(base64Image.length / 1024)}KB)`);
+      // Replicate SDK automatically uploads Buffer objects for us!
+      // No need for manual base64 or file upload
+      console.log('📤 Passing Buffer to Replicate (will auto-upload)...');
 
       const output = await this.client.run(
         "bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5",
         {
           input: {
-            image: base64Image,  // Use processed base64 image instead of URL
+            image: processedBuffer,  // Replicate SDK handles Buffer upload automatically!
             positive_prompt: prompt,
             denoising: options.denoising || 0.75,  // Lower = more similar to original
             steps: options.steps || 20,
