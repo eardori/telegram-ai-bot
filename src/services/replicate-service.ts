@@ -224,20 +224,19 @@ class ReplicateService {
       console.log(`✅ Processed size: ${processedMetadata.width}x${processedMetadata.height}`);
       console.log(`📦 Processed buffer size: ${processedBuffer.length} bytes`);
 
-      // Replicate SDK automatically uploads Buffer objects for us!
-      // No need for manual base64 or file upload
-      console.log('📤 Passing Buffer to Replicate (will auto-upload)...');
-      console.log(`🔍 Buffer type: ${Object.prototype.toString.call(processedBuffer)}`);
-      console.log(`🔍 Buffer isBuffer: ${Buffer.isBuffer(processedBuffer)}`);
-      console.log(`🔍 Input object:`, {
-        imageType: typeof processedBuffer,
-        imageLength: processedBuffer?.length,
-        promptLength: prompt.length,
-        denoising: options.denoising || 0.75
+      // Convert processed buffer to base64 data URI
+      // Replicate SDK's auto-upload doesn't work reliably with proxy
+      console.log('📤 Converting to base64 data URI...');
+      const base64Image = `data:image/jpeg;base64,${processedBuffer.toString('base64')}`;
+      console.log(`✅ Base64 data URI created, length: ${base64Image.length} characters`);
+      console.log(`🔍 Processed image info:`, {
+        bufferSize: processedBuffer.length,
+        base64Length: base64Image.length,
+        dimensions: `${processedMetadata.width}x${processedMetadata.height}`
       });
 
       const inputConfig = {
-        image: processedBuffer,  // Replicate SDK handles Buffer upload automatically!
+        image: base64Image,  // Use base64 data URI instead of Buffer
         positive_prompt: prompt,
         denoising: options.denoising || 0.75,  // Lower = more similar to original
         steps: options.steps || 20,
