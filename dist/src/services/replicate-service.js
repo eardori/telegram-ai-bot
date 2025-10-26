@@ -209,12 +209,30 @@ class ReplicateService {
             const output = await this.client.run("black-forest-labs/flux-1.1-pro", { input: inputConfig });
             console.log('✅ NSFW image-to-image generated successfully');
             console.log('📦 Output type:', typeof output);
-            console.log('📦 Output value:', JSON.stringify(output).substring(0, 200));
-            // FLUX 1.1 Pro returns a single URL string, not an array
+            console.log('📦 Output is array:', Array.isArray(output));
+            console.log('📦 Output keys:', Object.keys(output || {}));
+            console.log('📦 Output value:', JSON.stringify(output).substring(0, 300));
+            // FLUX 1.1 Pro may return different formats
+            let imageUrl;
             if (typeof output === 'string') {
-                return [output];
+                // Direct URL string
+                imageUrl = output;
             }
-            return output;
+            else if (Array.isArray(output) && output.length > 0) {
+                // Array of URLs
+                imageUrl = output[0];
+            }
+            else if (output && typeof output === 'object') {
+                // Object with url property (e.g., { url: '...' } or FileOutput)
+                const obj = output;
+                imageUrl = obj.url || obj.uri || obj.output || obj[0];
+            }
+            if (!imageUrl) {
+                console.error('❌ Could not extract image URL from output:', output);
+                throw new Error('Failed to extract image URL from Replicate response');
+            }
+            console.log('✅ Extracted image URL:', imageUrl.substring(0, 80) + '...');
+            return [imageUrl];
         }
         catch (error) {
             console.error('❌ Replicate image-to-image generation error:', {
