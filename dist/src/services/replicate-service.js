@@ -44,6 +44,12 @@ class ReplicateService {
                         // Fallback: try to convert to string
                         originalUrl = String(input);
                     }
+                    console.log(`🌐 Custom fetch called:`, {
+                        url: originalUrl.substring(0, 80),
+                        method: init?.method || 'GET',
+                        hasBody: !!init?.body,
+                        bodyType: init?.body ? Object.prototype.toString.call(init.body) : 'none'
+                    });
                     const headers = new Headers(init?.headers);
                     // Set User-Agent
                     if (!headers.has('User-Agent')) {
@@ -172,17 +178,25 @@ class ReplicateService {
             // Replicate SDK automatically uploads Buffer objects for us!
             // No need for manual base64 or file upload
             console.log('📤 Passing Buffer to Replicate (will auto-upload)...');
-            const output = await this.client.run("bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5", {
-                input: {
-                    image: processedBuffer, // Replicate SDK handles Buffer upload automatically!
-                    positive_prompt: prompt,
-                    denoising: options.denoising || 0.75, // Lower = more similar to original
-                    steps: options.steps || 20,
-                    seed: options.seed || -1,
-                    scheduler: "simple",
-                    sampler_name: "euler"
-                }
+            console.log(`🔍 Buffer type: ${Object.prototype.toString.call(processedBuffer)}`);
+            console.log(`🔍 Buffer isBuffer: ${Buffer.isBuffer(processedBuffer)}`);
+            console.log(`🔍 Input object:`, {
+                imageType: typeof processedBuffer,
+                imageLength: processedBuffer?.length,
+                promptLength: prompt.length,
+                denoising: options.denoising || 0.75
             });
+            const inputConfig = {
+                image: processedBuffer, // Replicate SDK handles Buffer upload automatically!
+                positive_prompt: prompt,
+                denoising: options.denoising || 0.75, // Lower = more similar to original
+                steps: options.steps || 20,
+                seed: options.seed || -1,
+                scheduler: "simple",
+                sampler_name: "euler"
+            };
+            console.log('🚀 Calling Replicate.run with model: bxclib2/flux_img2img');
+            const output = await this.client.run("bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5", { input: inputConfig });
             console.log('✅ NSFW image-to-image generated successfully');
             return output;
         }
