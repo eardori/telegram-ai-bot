@@ -235,20 +235,31 @@ class ReplicateService {
         dimensions: `${processedMetadata.width}x${processedMetadata.height}`
       });
 
+      // Use official Black Forest Labs FLUX.1 [dev] model with image-to-image
       const inputConfig = {
-        image: base64Image,  // Use base64 data URI instead of Buffer
-        positive_prompt: prompt,
-        denoising: options.denoising || 0.75,  // Lower = more similar to original
-        steps: options.steps || 20,
-        seed: options.seed || -1,
-        scheduler: "simple",
-        sampler_name: "euler"
+        image: base64Image,  // Base64 data URI
+        prompt: prompt,  // Text description
+        prompt_strength: options.denoising || 0.8,  // 0-1, how much to transform (0.8 = strong transform)
+        guidance: 3.5,  // CFG scale, 0-10
+        num_inference_steps: options.steps || 28,  // Denoising steps, default 28
+        num_outputs: 1,  // Number of images
+        aspect_ratio: "1:1",  // Keep square
+        output_format: "jpg",
+        output_quality: 90,
+        seed: options.seed && options.seed > 0 ? options.seed : undefined  // Optional seed
       };
 
-      console.log('🚀 Calling Replicate.run with model: bxclib2/flux_img2img');
+      console.log('🚀 Calling Replicate.run with model: black-forest-labs/flux-dev (official)');
+      console.log('📋 Input config:', {
+        imageLength: base64Image.length,
+        promptLength: prompt.length,
+        prompt_strength: inputConfig.prompt_strength,
+        guidance: inputConfig.guidance,
+        steps: inputConfig.num_inference_steps
+      });
 
       const output = await this.client.run(
-        "bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5",
+        "black-forest-labs/flux-dev",
         { input: inputConfig }
       );
 

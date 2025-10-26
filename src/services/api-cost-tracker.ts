@@ -30,7 +30,7 @@ export interface APIUsageLog {
 }
 
 /**
- * Gemini API Pricing
+ * API Pricing (as of 2025)
  */
 const PRICING = {
   // Gemini 2.5 Flash Image Preview
@@ -43,6 +43,11 @@ const PRICING = {
   'gemini-2.0-flash-exp': {
     input_token: 0,
     output_token: 0
+  },
+
+  // Replicate FLUX.1 [dev] - Official Black Forest Labs model
+  'black-forest-labs/flux-dev': {
+    per_image: 0.030  // $0.030 per image (text-to-image or image-to-image)
   }
 };
 
@@ -99,14 +104,17 @@ function calculateCost(log: APIUsageLog): number {
 
   let cost = 0;
 
-  // Image-based pricing
-  if ('input_image' in pricing && 'output_image' in pricing) {
+  // Per-image pricing (e.g., Replicate FLUX)
+  if ('per_image' in pricing) {
+    cost += (log.output_images || 1) * pricing.per_image;
+  }
+  // Image-based pricing (e.g., Gemini)
+  else if ('input_image' in pricing && 'output_image' in pricing) {
     cost += (log.input_images || 0) * pricing.input_image;
     cost += (log.output_images || 0) * pricing.output_image;
   }
-
   // Token-based pricing
-  if ('input_token' in pricing && 'output_token' in pricing) {
+  else if ('input_token' in pricing && 'output_token' in pricing) {
     cost += (log.input_tokens || 0) * pricing.input_token;
     cost += (log.output_tokens || 0) * pricing.output_token;
   }

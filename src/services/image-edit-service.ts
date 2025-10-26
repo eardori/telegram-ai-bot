@@ -248,8 +248,8 @@ Generate the edited image following all instructions above.`;
         user_id: request.userId,
         chat_id: request.chatId,
         operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
-        model: isNSFW ? 'flux.1dev-uncensored-v3' : 'gemini-2.5-flash-image-preview',
-        input_images: isNSFW ? 0 : 1, // Replicate is text-to-image
+        model: isNSFW ? 'black-forest-labs/flux-dev' : 'gemini-2.5-flash-image-preview',
+        input_images: 1, // Both use image-to-image now
         output_images: 1,
         estimated_cost: 0, // Will be calculated in logAPIUsage
         template_key: request.templateKey,
@@ -278,8 +278,8 @@ Generate the edited image following all instructions above.`;
         user_id: request.userId,
         chat_id: request.chatId,
         operation: isNSFW ? 'nsfw_image_gen' : 'image_edit',
-        model: isNSFW ? 'flux.1dev-uncensored-v3' : 'gemini-2.5-flash-image-preview',
-        input_images: isNSFW ? 0 : 1,
+        model: isNSFW ? 'black-forest-labs/flux-dev' : 'gemini-2.5-flash-image-preview',
+        input_images: 1,
         output_images: 0,
         estimated_cost: 0,
         template_key: request.templateKey,
